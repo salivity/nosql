@@ -1,0 +1,62 @@
+[
+  [
+    10,
+    "Why Are Graph NoSQL Databases Built for Complex Networks?",
+    "Graph NoSQL databases are specifically designed to traverse complex network relationships by storing connections as first-class, persistent entities alongside data rather than relying on runtime compute operations. Unlike traditional relational systems th",
+    false
+  ],
+  [
+    9,
+    "How Do Wide-Column NoSQL Stores Manage Column Families?",
+    "Wide-column NoSQL stores manage column families as dynamic, row-based collections of key-value pairs stored together on disk, whereas relational tables organize data into rigid, fixed-schema structures across rows and predefined columns. Unlike relational",
+    false
+  ],
+  [
+    8,
+    "What Are the Performance Advantages of Key-Value NoSQL Databases?",
+    "Key-value NoSQL databases offer substantial performance benefits over traditional relational databases by using simple $O(1)$ direct lookup access patterns, schema-less data structures, and inherent horizontal scalability. By trading away complex relation",
+    false
+  ],
+  [
+    7,
+    "How Do NoSQL Document Databases Store and Retrieve Data?",
+    "NoSQL document databases structure semi-structured data by storing related information together in self-contained, flexible records—typically formatted as JSON or BSON—rather than distributing it across rigid, predefined tables. These databases index fiel",
+    false
+  ],
+  [
+    6,
+    "Why Is Horizontal Scaling Central to NoSQL Design?",
+    "NoSQL databases were fundamentally engineered around horizontal scaling to overcome the physical and financial limits of traditional vertical scaling. By distributing data across a cluster of commodity servers rather than relying on a single high-performa",
+    false
+  ],
+  [
+    5,
+    "How Does the CAP Theorem Limit NoSQL Consistency Models?",
+    "The CAP theorem states that a distributed data store can simultaneously provide at most two of three guarantees: Consistency (every read receives the most recent write or an error), Availability (every non-failing node returns a non-error response), and P",
+    false
+  ],
+  [
+    4,
+    "Why Do Applications Requiring High-Throughput Real-Time Streaming Often Choose a NoSQL Store?",
+    "Applications handling real-time data streams—such as Internet of Things (IoT) sensor networks, financial ticker processing, live clickstream analytics, and gaming telemetry—demand write speeds and throughput that traditional relational database management",
+    false
+  ],
+  [
+    3,
+    "What Are the Main Categories of NoSQL Databases?",
+    "NoSQL databases are broadly classified into four primary categories: key-value stores, document databases, wide-column stores, and graph databases. Each category is designed around a specific data model and optimized for distinct performance, scalability,",
+    false
+  ],
+  [
+    2,
+    "How Do NoSQL and Relational Databases Differ in Schema Flexibility?",
+    "NoSQL databases offer dynamic, schema-agnostic structures that allow developers to store unstructured or rapidly changing data without prior structural definitions, whereas traditional relational databases enforce rigid, predefined schemas using fixed tab",
+    false
+  ],
+  [
+    1,
+    "What Is the Fundamental Architecture of a NoSQL Database System?",
+    "NoSQL database architecture is designed to handle non-relational, high-velocity, and large-scale data across distributed clusters without relying on rigid table schemas. Instead of traditional SQL structures, NoSQL systems prioritize horizontal scalabilit",
+    false
+  ]
+]
