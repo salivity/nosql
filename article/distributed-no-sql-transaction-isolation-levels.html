@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Distributed NoSQL Transaction Isolation Levels - nosql</title>
+    <meta name="description" content="Distributed NoSQL databases maintain transaction isolation across network boundaries by combining distributed consensus, global timekeeping mechanisms, multi-version concurrency control, and atomic commit protocols. Because data is partitioned and replica">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/distributed-no-sql-transaction-isolation-levels">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Distributed NoSQL Transaction Isolation Levels - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/distributed-no-sql-transaction-isolation-levels" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Distributed NoSQL databases maintain transaction isolation across network boundaries by combining distributed consensus, global timekeeping mechanisms, multi-version concurrency control, and atomic commit protocols. Because data is partitioned and replica" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="distributed-nosql-transaction-isolation-levels">Distributed
+NoSQL Transaction Isolation Levels</h1>
+<p>Distributed NoSQL databases maintain transaction isolation across
+network boundaries by combining distributed consensus, global
+timekeeping mechanisms, multi-version concurrency control, and atomic
+commit protocols. Because data is partitioned and replicated across
+independent physical nodes, these systems cannot rely on single-node
+shared memory or local CPU locks. Instead, they coordinate state changes
+using network protocols that establish a deterministic order of
+operations, detect concurrent conflicts, and guarantee predictable
+isolation levels ranging from Read Committed to Strict
+Serializability.</p>
+<h2 id="the-challenge-of-distributed-isolation">The Challenge of
+Distributed Isolation</h2>
+<p>In a centralized database, an engine enforces isolation using local
+mutexes, memory buffers, and hardware clocks. In a distributed NoSQL
+environment, data is sharded across multiple nodes and replicated across
+availability zones or regions.</p>
+<p>Maintaining isolation across these boundaries introduces distinct
+problems:</p>
+<ul>
+<li><strong>Clock Skew:</strong> Physical hardware clocks drift, making
+it impossible to rely entirely on local wall-clock times to sequence
+operations.</li>
+<li><strong>Network Latency and Partitions:</strong> Communication
+between nodes is subject to variable delay, packet loss, and temporary
+partitions (as described by the CAP theorem).</li>
+<li><strong>Distributed Deadlocks:</strong> Locking records across
+multiple independent nodes increases lock contention and the risk of
+distributed deadlocks.</li>
+</ul>
+<p>To overcome these constraints, distributed NoSQL databases implement
+specific architectural mechanisms to establish isolation boundaries.</p>
+<h2 id="consensus-algorithms-paxos-and-raft">Consensus Algorithms (Paxos
+and Raft)</h2>
+<p>Consensus protocols form the foundation of distributed state
+machines. When a transaction touches replicated data, the database uses
+Paxos, Raft, or a variant to ensure that a quorum of replica nodes
+agrees on the exact order of incoming write operations.</p>
+<p>While consensus guarantees that replicas process log entries in the
+identical sequence, it primarily addresses replication consistency. To
+extend this to transaction isolation across multiple shards, databases
+combine consensus groups with coordination layers. Each shard typically
+runs its own consensus group to handle localized state, while
+higher-level coordination protocols manage multi-shard operations.</p>
+<h2 id="global-ordering-and-time-synchronization">Global Ordering and
+Time Synchronization</h2>
+<p>Determining which transaction occurred first is critical for
+Repeatable Read, Snapshot Isolation, and Serializable levels.
+Distributed systems resolve ordering without relying on perfectly
+synchronized wall clocks through several approaches:</p>
+<ul>
+<li><strong>Hybrid Logical Clocks (HLC):</strong> Databases like
+CockroachDB and MongoDB combine physical NTP clocks with logical
+counters (Lamport timestamps). HLCs ensure that causal relationships
+between transactions are strictly preserved across nodes even if
+physical clocks drift within a bounded window.</li>
+<li><strong>Synchronized Hardware Clocks (TrueTime):</strong> Used by
+systems modeled after Google Spanner, atomic clocks and GPS receivers
+provide bounded time uncertainty (<span
+class="math inline">\(\epsilon\)</span>). If a transaction commits at
+time <span class="math inline">\(t\)</span>, the system waits <span
+class="math inline">\(2\epsilon\)</span> before releasing locks,
+guaranteeing that any subsequent transaction receives a higher
+timestamp.</li>
+<li><strong>Centralized Timestamp Allocators:</strong> Systems like
+FoundationDB and Apache TiKV use an active-passive centralized sequencer
+to assign strictly increasing logical timestamps to read and write
+requests, eliminating clock drift issues at the expense of a bounded
+network hop to the coordinator.</li>
+</ul>
+<h2 id="multi-version-concurrency-control-mvcc">Multi-Version
+Concurrency Control (MVCC)</h2>
+<p>Distributed NoSQL systems widely deploy MVCC to implement Snapshot
+Isolation and prevent read operations from blocking write
+operations.</p>
+<p>Under MVCC:</p>
+<ol type="1">
+<li>Every write operation creates a new version of the record tagged
+with a commit timestamp or logical version number.</li>
+<li>When a read transaction begins, it is assigned a read
+timestamp.</li>
+<li>The query ignores any record versions created after its assigned
+read timestamp, effectively reading a static snapshot of the
+database.</li>
+</ol>
+<p>Across network boundaries, this means a node can execute long-running
+read queries locally using its current data replica without acquiring
+distributed read locks or interfering with incoming writes on other
+nodes.</p>
+<h2 id="concurrency-control-pessimistic-vs-optimistic">Concurrency
+Control: Pessimistic vs. Optimistic</h2>
+<p>To handle conflicting writes across network partitions, distributed
+databases apply either pessimistic or optimistic concurrency
+control:</p>
+<h3 id="distributed-two-phase-locking-pessimistic">Distributed Two-Phase
+Locking (Pessimistic)</h3>
+<p>In pessimistic systems, transactions acquire shared locks for reads
+and exclusive locks for writes across the network. If a transaction
+touches keys on multiple shards, it holds those locks across all
+relevant nodes until the transaction commits or rolls back. Strict
+Two-Phase Locking (S2PL) is often required to guarantee Serializability,
+but it incurs substantial latency penalties due to network round-trips
+for lock acquisition and increases the blast radius of network
+partitions.</p>
+<h3 id="optimistic-concurrency-control-occ">Optimistic Concurrency
+Control (OCC)</h3>
+<p>Many high-throughput NoSQL databases favor OCC. Transactions execute
+without acquiring distributed locks:</p>
+<ol type="1">
+<li><strong>Read Phase:</strong> The client reads the required data and
+buffers modifications locally.</li>
+<li><strong>Validation Phase:</strong> Before committing, the
+transaction coordinator contacts the nodes holding the affected
+partitions to verify that no concurrent transaction has modified the
+read keys.</li>
+<li><strong>Commit Phase:</strong> If validation passes, changes are
+written; if a conflict is detected, the transaction aborts and
+retries.</li>
+</ol>
+<p>OCC minimizes network lock duration, making it effective in workloads
+with low write contention.</p>
+<h2 id="multi-shard-atomicity-two-phase-commit-2pc">Multi-Shard
+Atomicity: Two-Phase Commit (2PC)</h2>
+<p>When a transaction spans multiple consensus groups or shards, the
+database must ensure that isolation is not broken mid-execution by a
+partial failure. Distributed NoSQL engines use a Two-Phase Commit (2PC)
+protocol layered on top of consensus:</p>
+<ol type="1">
+<li><strong>Prepare Phase:</strong> A designated coordinator node asks
+all participating shards to reserve resources, validate locks or version
+numbers, and write an intent log to their local consensus engines.</li>
+<li><strong>Commit Phase:</strong> If all participants vote "ready," the
+coordinator writes a commit record and broadcasts the commit command
+across the network. If any participant fails or detects an isolation
+conflict, the coordinator issues an abort command.</li>
+</ol>
+<p>By running 2PC over Paxos or Raft, the system avoids the traditional
+blocking single-point-of-failure problem associated with classic 2PC
+coordinators.</p>
+<h2 id="summary-of-enforced-isolation-levels">Summary of Enforced
+Isolation Levels</h2>
+<ul>
+<li><strong>Read Committed:</strong> Often achieved via single-key
+atomic operations and basic MVCC; reads observe only committed data, but
+successive reads within the same transaction may see different
+values.</li>
+<li><strong>Snapshot Isolation:</strong> Achieved using MVCC combined
+with distributed timestamping (HLC or Timestamp Oracle). Transactions
+view a point-in-time snapshot, preventing non-repeatable reads and
+phantom reads, though still susceptible to write skew.</li>
+<li><strong>Strict Serializability (External Consistency):</strong> The
+highest isolation level, achieved by combining consensus-backed
+replication, Two-Phase Locking (or strict validation), and bounded time
+ordering. Transactions execute such that the outcome matches a
+sequential, single-node execution consistent with real-world time.</li>
+</ul></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/distributed-no-sql-transaction-isolation-levels';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

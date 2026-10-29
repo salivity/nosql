@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Preventing Data Loss in NoSQL Out of Memory Events - nosql</title>
+    <meta name="description" content="When a NoSQL database node runs out of physical memory (RAM), it risks performance degradation or abrupt termination by the operating system&#39;s Out-Of-Memory (OOM) killer. To maintain durability and prevent data loss during these conditions, modern NoSQL a">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/preventing-data-loss-in-no-sql-out-of-memory-events">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Preventing Data Loss in NoSQL Out of Memory Events - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/preventing-data-loss-in-no-sql-out-of-memory-events" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="When a NoSQL database node runs out of physical memory (RAM), it risks performance degradation or abrupt termination by the operating system&#39;s Out-Of-Memory (OOM) killer. To maintain durability and prevent data loss during these conditions, modern NoSQL a" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="preventing-data-loss-in-nosql-out-of-memory-events">Preventing
+Data Loss in NoSQL Out of Memory Events</h1>
+<p>When a NoSQL database node runs out of physical memory (RAM), it
+risks performance degradation or abrupt termination by the operating
+system's Out-Of-Memory (OOM) killer. To maintain durability and prevent
+data loss during these conditions, modern NoSQL architectures rely on a
+combination of persistent write-ahead logging, proactive memory-to-disk
+flushing, backpressure mechanisms, and distributed consensus across
+clusters. These layered safeguards guarantee that even if a node crashes
+due to memory exhaustion, written data remains intact and
+recoverable.</p>
+<h3 id="write-ahead-logging-wal">Write-Ahead Logging (WAL)</h3>
+<p>The primary line of defense against unexpected memory crashes is the
+Write-Ahead Log (often called a Commit Log). Before any write, update,
+or delete operation is accepted into volatile RAM, the database engine
+appends the transaction to an append-only log located on non-volatile
+storage (SSD or HDD). Because sequential disk writes are significantly
+faster than random writes, the database can safely persist the exact
+operation with minimal latency. If an OOM event triggers a sudden node
+crash, the database recovers by replaying this log upon reboot to
+reconstruct the in-memory state.</p>
+<h3 id="memtable-flushing-and-sstables">MemTable Flushing and
+SSTables</h3>
+<p>Databases utilizing Log-Structured Merge-tree (LSM) architectures,
+such as Apache Cassandra, RocksDB, and ScyllaDB, buffer incoming writes
+in an in-memory data structure called a MemTable. To prevent these
+structures from consuming all physical memory, the engine defines strict
+allocation thresholds. Once a MemTable crosses a predefined memory
+limit, it is frozen and queued to be flushed asynchronously to disk as
+an immutable Sorted String Table (SSTable). By decoupling memory
+thresholds from hard physical limits, the system proactively clears RAM
+before an exhaustion event occurs.</p>
+<h3 id="backpressure-and-memory-circuit-breakers">Backpressure and
+Memory Circuit Breakers</h3>
+<p>To stop memory allocation from spiraling out of control, enterprise
+NoSQL systems implement internal memory tracking and circuit breakers.
+When available physical RAM drops below safety thresholds:</p>
+<ul>
+<li><strong>Write Rejection:</strong> The node actively sheds incoming
+traffic, returning <code>503 Service Unavailable</code> or temporary
+retry errors to client applications rather than continuing to consume
+memory.</li>
+<li><strong>Request Throttling:</strong> The database slows down
+ingestion pipelines to match the disk subsystem's capability to flush
+data from RAM to disk.</li>
+<li><strong>Eviction Strategies:</strong> For in-memory or
+cache-oriented NoSQL systems (such as Redis), LRU (Least Recently Used)
+or LFU (Least Frequently Used) policies automatically purge non-critical
+or expired keys from memory, preserving space for active
+transactions.</li>
+</ul>
+<h3 id="distributed-replication-and-quorum-consensus">Distributed
+Replication and Quorum Consensus</h3>
+<p>In a distributed NoSQL environment, no single node is an isolated
+point of failure. Write operations are typically coordinated across a
+replica set using consensus algorithms or quorum-based replication
+models. Under standard configurations (such as <code>WRITE QUORUM</code>
+or <code>W: majority</code>), a write is not acknowledged as successful
+to the client until it has been confirmed by multiple independent nodes.
+If one node is abruptly killed by the OS kernel due to an OOM condition,
+the remaining healthy nodes already hold the confirmed data. Once the
+failed node restarts or is replaced, anti-entropy processes (such as
+Merkle tree synchronization or hinted handoffs) stream the missing data
+to the recovering node.</p>
+<h3 id="operating-system-and-process-recovery">Operating System and
+Process Recovery</h3>
+<p>At the operating system level, administrators tune virtual memory
+parameters—such as swappiness, dirty background ratios, and OOM killer
+scores (<code>oom_score_adj</code>)—to delay or control how the OS
+handles process termination. Database processes are configured to be
+managed by supervisors (such as <code>systemd</code> or Kubernetes
+orchestrators) that immediately restart the node. Upon restart, the
+database mounts its storage volumes, reads the WAL, reconciles its
+indices, and rejoins the cluster without losing committed
+transactions.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/preventing-data-loss-in-no-sql-out-of-memory-events';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

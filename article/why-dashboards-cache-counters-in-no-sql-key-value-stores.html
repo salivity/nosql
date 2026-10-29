@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Why Dashboards Cache Counters in NoSQL Key-Value Stores - nosql</title>
+    <meta name="description" content="Operational dashboards require real-time, ultra-low-latency visibility into system performance, user activity, and business metrics. Running continuous aggregation queries over high-volume raw event logs directly on primary relational or analytical databa">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/why-dashboards-cache-counters-in-no-sql-key-value-stores">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Why Dashboards Cache Counters in NoSQL Key-Value Stores - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/why-dashboards-cache-counters-in-no-sql-key-value-stores" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Operational dashboards require real-time, ultra-low-latency visibility into system performance, user activity, and business metrics. Running continuous aggregation queries over high-volume raw event logs directly on primary relational or analytical databa" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="why-dashboards-cache-counters-in-nosql-key-value-stores">Why
+Dashboards Cache Counters in NoSQL Key-Value Stores</h1>
+<p>Operational dashboards require real-time, ultra-low-latency
+visibility into system performance, user activity, and business metrics.
+Running continuous aggregation queries over high-volume raw event logs
+directly on primary relational or analytical databases creates severe
+I/O bottlenecks and unpredictable response times. To solve this,
+engineering teams pre-compute metrics and store the processed counter
+aggregations in NoSQL key-value stores. This architecture decouples
+write-heavy analytical processing from read-heavy visualization layers,
+ensuring sub-millisecond retrieval, high write concurrency, dynamic
+scalability, and system resilience.</p>
+<h3 id="eliminating-expensive-on-the-fly-aggregations">Eliminating
+Expensive On-the-Fly Aggregations</h3>
+<p>Calculating metrics such as total page views, error rates, or active
+sessions on the fly requires scanning millions of event rows with
+<code>GROUP BY</code> and <code>COUNT</code> operations. Repeating these
+heavy scans every few seconds for hundreds of concurrent dashboard users
+quickly exhausts CPU and disk I/O on operational databases. By shifting
+to a streaming pre-aggregation pipeline—where events are aggregated in
+micro-batches and written as final tally values—the dashboard only needs
+to read pre-calculated numbers rather than computing them from raw
+data.</p>
+<h3 id="sub-millisecond-read-performance">Sub-Millisecond Read
+Performance</h3>
+<p>Key-value stores optimize for direct point lookups. With predictable
+key designs (for example,
+<code>tenant:101:metric:api_errors:2026-03-30:hour:14</code>), data
+retrieval is an <span class="math inline">\(O(1)\)</span> operation that
+avoids relational joins, indexing overhead, and complex query execution
+plans. This architectural predictability ensures that dashboards load
+instantly, even when displaying dozens of disparate widgets spanning
+multiple dimensions.</p>
+<h3 id="high-throughput-atomic-increments">High-Throughput Atomic
+Increments</h3>
+<p>Telemetry streams produce massive write loads that can saturate
+traditional transactional databases. NoSQL key-value stores—such as
+Redis, DynamoDB, or Aerospike—natively support high-speed atomic
+increments (<code>INCR</code>, <code>HINCRBY</code>, or <code>ADD</code>
+primitives). Stream processors like Apache Flink or Kafka Streams can
+directly push localized windowed updates into the cache without running
+into database deadlocks, table-level lock contention, or costly
+read-modify-write transactional cycles.</p>
+<h3 id="horizontal-scalability-for-spiky-workloads">Horizontal
+Scalability for Spiky Workloads</h3>
+<p>Operational metrics swell during traffic surges, deployments, or
+outages—precisely when visibility is most critical. Relational databases
+struggle to scale writes dynamically across distributed nodes. Key-value
+stores rely on partitioned hashing schemes to distribute metrics
+uniformly across a cluster. This architecture allows organizations to
+scale storage and throughput horizontally simply by adding nodes,
+ensuring the metrics pipeline never backpressures the ingestion layer
+during critical incidents.</p>
+<h3 id="native-data-expiration-and-memory-management">Native Data
+Expiration and Memory Management</h3>
+<p>Operational dashboards primarily track recent performance
+metrics—such as the last 5 minutes, 24 hours, or 7 days. Key-value
+stores feature native Time-to-Live (TTL) mechanics at the key level.
+Once an aggregation interval ages out of the operational window, the
+storage engine purges it automatically without requiring background
+batch-delete jobs that degrade database performance. This keeps the
+active working dataset compact, memory-efficient, and optimized for fast
+lookups.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/why-dashboards-cache-counters-in-no-sql-key-value-stores';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

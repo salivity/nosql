@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Key-Value NoSQL Databases Expire Keys at Scale - nosql</title>
+    <meta name="description" content="Key-value NoSQL databases manage key expiration (TTL) across massive datasets by combining passive expiration, active background sweeping, and storage-engine-level pruning during compaction. Instead of maintaining high-overhead global timers for every key">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/how-key-value-no-sql-databases-expire-keys-at-scale">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Key-Value NoSQL Databases Expire Keys at Scale - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/how-key-value-no-sql-databases-expire-keys-at-scale" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Key-value NoSQL databases manage key expiration (TTL) across massive datasets by combining passive expiration, active background sweeping, and storage-engine-level pruning during compaction. Instead of maintaining high-overhead global timers for every key" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-key-value-nosql-databases-expire-keys-at-scale">How
+Key-Value NoSQL Databases Expire Keys at Scale</h1>
+<p>Key-value NoSQL databases manage key expiration (TTL) across massive
+datasets by combining passive expiration, active background sweeping,
+and storage-engine-level pruning during compaction. Instead of
+maintaining high-overhead global timers for every key, engines like
+Redis, Memcached, Aerospike, and RocksDB balance CPU utilization and
+memory footprint through probabilistic scanning and lazy evaluation.
+This article examines the core mechanisms these databases use to evict
+expired data efficiently without degrading read and write
+throughput.</p>
+<h3 id="passive-lazy-expiration">Passive (Lazy) Expiration</h3>
+<p>Passive expiration is the least resource-intensive enforcement
+strategy. In this model, the database does not actively track when a key
+expires. Instead, it checks the key's TTL metadata only when a client
+sends a read or update request for that specific key.</p>
+<p>If the current system timestamp exceeds the key's expiration
+timestamp, the engine marks the key as expired, removes it from memory
+or storage, and returns a cache miss or null response to the client.
+While this method requires virtually zero background CPU overhead, it
+cannot be relied upon exclusively. Abandoned keys that are never read
+again would reside in memory indefinitely, resulting in memory leaks
+over time.</p>
+<h3 id="active-probabilistic-sweeping">Active Probabilistic
+Sweeping</h3>
+<p>To reclaim memory from keys that are never accessed again, databases
+implement active background eviction routines. Tracking millions of
+individual timers in a priority queue or min-heap introduces <span
+class="math inline">\(O(\log N)\)</span> overhead that becomes
+prohibitive at scale. Consequently, engines often rely on randomized,
+probabilistic sampling.</p>
+<p>Redis, for instance, runs an active eviction loop (typically 10 to
+100 times per second) using the following cycle:</p>
+<ol type="1">
+<li>Sample a small batch of keys that have an associated TTL (e.g., 20
+random keys).</li>
+<li>Evict all sampled keys that have expired.</li>
+<li>If the percentage of expired keys in the sample exceeds a specific
+threshold (e.g., 25%), repeat the process immediately.</li>
+</ol>
+<p>This adaptive loop ensures that the database aggressively purges keys
+when a large wave of expirations occurs, while conserving CPU cycles
+when the overall expiration rate is low.</p>
+<h3 id="compaction-time-pruning-in-lsm-trees">Compaction-Time Pruning in
+LSM-Trees</h3>
+<p>For disk-backed NoSQL databases that use Log-Structured Merge-trees
+(LSM-trees)—such as Apache Cassandra, ScyllaDB, and RocksDB—expirations
+are handled asynchronously during storage maintenance.</p>
+<p>Writes and updates in LSM-tree architectures are appended
+sequentially to memory (MemTables) and flushed to immutable disk files
+(SSTables). Instead of executing in-place deletions, these databases
+append expiration timestamps or deletion markers (tombstones). When
+background compaction merges multiple SSTables to reclaim disk space, it
+evaluates the expiration timestamps and drops the obsolete data
+entirely, avoiding random disk I/O.</p>
+<h3 id="bucket-based-and-ring-buffer-partitioning">Bucket-Based and Ring
+Buffer Partitioning</h3>
+<p>Some high-throughput databases organize expiring data into discrete
+time buckets, often implemented via hierarchical timing wheels or ring
+buffers.</p>
+<p>Keys are categorized based on their expiration epoch (for example,
+partitioned into one-minute or one-hour ranges). When a time bucket
+elapses, the engine drops the entire partition or unlinks the bucket's
+underlying memory block in an <span class="math inline">\(O(1)\)</span>
+operation. This bulk-eviction design eliminates the need to inspect or
+delete individual keys one by one, making it ideal for session
+management and ephemeral time-series workloads.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/how-key-value-no-sql-databases-expire-keys-at-scale';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

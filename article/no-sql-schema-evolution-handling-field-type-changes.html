@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NoSQL Schema Evolution: Handling Field Type Changes - nosql</title>
+    <meta name="description" content="While NoSQL databases are frequently labeled as &quot;schemaless,&quot; changing a field&#39;s data type over time introduces significant application-level complexity. This article explores how modern engineering teams handle NoSQL schema evolution when field types mut">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/no-sql-schema-evolution-handling-field-type-changes">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="NoSQL Schema Evolution: Handling Field Type Changes - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/no-sql-schema-evolution-handling-field-type-changes" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="While NoSQL databases are frequently labeled as &quot;schemaless,&quot; changing a field&#39;s data type over time introduces significant application-level complexity. This article explores how modern engineering teams handle NoSQL schema evolution when field types mut" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="nosql-schema-evolution-handling-field-type-changes">NoSQL Schema
+Evolution: Handling Field Type Changes</h1>
+<p>While NoSQL databases are frequently labeled as "schemaless,"
+changing a field's data type over time introduces significant
+application-level complexity. This article explores how modern
+engineering teams handle NoSQL schema evolution when field types mutate,
+covering strategies such as schema-on-read handling, document
+versioning, lazy data transformation, and eager batch migrations to
+ensure zero downtime and data integrity.</p>
+<h3 id="the-challenge-of-field-type-changes-in-nosql">The Challenge of
+Field Type Changes in NoSQL</h3>
+<p>In NoSQL document and key-value stores (such as MongoDB, Couchbase,
+or DynamoDB), the database engine does not enforce uniform types across
+records. A field named <code>status</code> can store an integer in one
+document, a string in another, and an array in a third.</p>
+<p>While this flexibility avoids rigid database-level
+<code>ALTER TABLE</code> locks, it shifts the burden of type safety
+entirely to the application layer. If an application expects
+<code>user.phone</code> to be a string, but legacy records store it as
+an integer and newer records store it as an array of strings, the
+application will encounter runtime deserialization errors, unexpected
+<code>null</code> values, or indexing and query failures.</p>
+<h3
+id="strategy-1-schema-on-read-application-level-defensive-parsing">Strategy
+1: Schema-on-Read (Application-Level Defensive Parsing)</h3>
+<p>The most common approach in NoSQL systems is handling variation at
+read time within the application logic or Data Access Object (DAO)
+layer.</p>
+<ul>
+<li><strong>Type Inspection:</strong> When fetching a document, the
+application inspects the runtime type of the field using dynamic typing
+checks (e.g., checking <code>typeof</code> or using custom
+deserializers).</li>
+<li><strong>Normalization in Memory:</strong> The application normalizes
+the value to the latest expected format immediately upon reading. If an
+integer is found where a string is expected, the code casts it before
+passing it to business logic.</li>
+<li><strong>Pros and Cons:</strong> This avoids running heavy migration
+scripts against the database, but it permanently litters the application
+codebase with backward-compatibility logic.</li>
+</ul>
+<h3 id="strategy-2-explicit-schema-versioning">Strategy 2: Explicit
+Schema Versioning</h3>
+<p>To avoid guessing field types dynamically, many teams attach metadata
+to documents representing their structural version.</p>
+<ul>
+<li><strong>Implementation:</strong> Every document includes a metadata
+attribute, such as <code>schema_version: 2</code>.</li>
+<li><strong>Execution:</strong> When the application reads the document,
+it routes the payload through a specific transformation pipeline or
+factory based on <code>schema_version</code>.</li>
+<li><strong>Advantage:</strong> Decouples legacy handling into dedicated
+transformation adapters, keeping core business logic clean.</li>
+</ul>
+<h3 id="strategy-3-lazy-incremental-migration">Strategy 3: Lazy
+(Incremental) Migration</h3>
+<p>Lazy migration combines schema-on-read with write-back capabilities
+to gradually upgrade data over time.</p>
+<ol type="1">
+<li><strong>Read:</strong> The application reads a record with an
+outdated field type.</li>
+<li><strong>Transform:</strong> The application transforms the field
+into the target type in memory.</li>
+<li><strong>Write-Back:</strong> When the record is next updated or
+saved, the document is persisted back to the database in the new format,
+along with an updated version number.</li>
+</ol>
+<p>Over time, frequently accessed documents automatically migrate to the
+new structure without the computational overhead of an immediate,
+database-wide migration.</p>
+<h3 id="strategy-4-additive-schema-evolution-parallel-fields">Strategy
+4: Additive Schema Evolution (Parallel Fields)</h3>
+<p>Instead of mutating an existing field's type in place, teams can
+treat schemas as strictly additive.</p>
+<ul>
+<li><strong>Creating a New Field:</strong> If a field
+<code>address</code> changes from a plain string to a structured object,
+introduce <code>address_v2</code> or <code>address_details</code>.</li>
+<li><strong>Dual-Writing:</strong> The application writes new data to
+both <code>address</code> (serialized to match the legacy format) and
+<code>address_v2</code>.</li>
+<li><strong>Fallback Reading:</strong> Reads attempt to retrieve
+<code>address_v2</code>; if absent, they fall back to
+<code>address</code>.</li>
+<li><strong>Deprecation:</strong> Once all systems migrate to the new
+field, the legacy field is marked deprecated and eventually purged.</li>
+</ul>
+<h3 id="strategy-5-eager-migration-background-batch-processing">Strategy
+5: Eager Migration (Background Batch Processing)</h3>
+<p>When queries rely on consistent indexing across all documents (such
+as sorting or filtering by the changed field), lazy migrations are
+insufficient. An eager migration updates the entire dataset directly in
+the database.</p>
+<ul>
+<li><strong>Batch Scripts:</strong> Background worker processes scan the
+database in paginated batches, reading documents with the old type,
+converting the value, and executing bulk updates.</li>
+<li><strong>Native Database Tools:</strong> Systems like MongoDB provide
+aggregation pipelines with update operations (e.g.,
+<code>$convert</code>, <code>$type</code>, and <code>$set</code>) that
+allow in-place transformations executed directly by the database server
+without round-trip network overhead.</li>
+<li><strong>Concurrency Control:</strong> To prevent write conflicts or
+performance degradation during eager migrations, updates are throttled
+and typically combined with optimistic locking mechanisms (such as
+record timestamps or version checks).</li>
+</ul></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/no-sql-schema-evolution-handling-field-type-changes';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

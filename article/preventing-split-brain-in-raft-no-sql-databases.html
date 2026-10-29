@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Preventing Split-Brain in Raft NoSQL Databases - nosql</title>
+    <meta name="description" content="Split-brain scenarios occur in distributed environments when network partitions divide a cluster into isolated segments, potentially causing multiple nodes to claim leadership and accept conflicting writes. In document-oriented NoSQL databases built on th">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/preventing-split-brain-in-raft-no-sql-databases">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Preventing Split-Brain in Raft NoSQL Databases - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/preventing-split-brain-in-raft-no-sql-databases" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Split-brain scenarios occur in distributed environments when network partitions divide a cluster into isolated segments, potentially causing multiple nodes to claim leadership and accept conflicting writes. In document-oriented NoSQL databases built on th" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="preventing-split-brain-in-raft-nosql-databases">Preventing
+Split-Brain in Raft NoSQL Databases</h1>
+<p>Split-brain scenarios occur in distributed environments when network
+partitions divide a cluster into isolated segments, potentially causing
+multiple nodes to claim leadership and accept conflicting writes. In
+document-oriented NoSQL databases built on the Raft consensus algorithm,
+maintaining data consistency requires strict architectural safeguards
+against these divergent states. This article explores the core
+mechanisms—including strict majority quorums, term-based epochs,
+pre-vote extensions, leader leases, and joint consensus—that prevent
+split-brain conditions and preserve cluster integrity during network
+disruptions.</p>
+<h3 id="strict-majority-quorums">Strict Majority Quorums</h3>
+<p>The primary defense against split-brain in Raft is the mathematical
+requirement of a strict majority quorum (<span class="math inline">\(N/2
++ 1\)</span>) for both electing a leader and committing document writes.
+In an <span class="math inline">\(N\)</span>-node cluster:</p>
+<ul>
+<li>A candidate must secure positive votes from a majority of the total
+cluster nodes to establish leadership.</li>
+<li>An active leader must replicate log entries to a majority of nodes
+before marking a write as committed.</li>
+</ul>
+<p>Because any two majority sets must share at least one overlapping
+node, it is mathematically impossible for two independent partitions to
+achieve a majority simultaneously. The partition lacking a majority
+automatically fails to elect a leader or commit transactions,
+immediately halting writes in the isolated minority.</p>
+<h3 id="term-based-epoch-tracking">Term-Based Epoch Tracking</h3>
+<p>Raft employs monotonically increasing terms (logical clocks) to
+establish the validity of cluster states and leadership claims. Every
+election cycle increments the current term number:</p>
+<ul>
+<li>Each Remote Procedure Call (RPC) includes the sender's term.</li>
+<li>If a partitioned, stale leader attempts to transmit append entries
+or heartbeats with an outdated term to nodes in the majority partition,
+those nodes reject the request.</li>
+<li>If a leader receives a message containing a term greater than its
+own, it immediately relinquishes its status and reverts to a follower
+state.</li>
+</ul>
+<p>This mechanism ensures that older leaders isolated on the wrong side
+of a network partition are deposed as soon as communication resumes.</p>
+<h3 id="the-pre-vote-protocol">The Pre-Vote Protocol</h3>
+<p>Standard Raft can experience brief disruptions when an isolated
+follower repeatedly times out, increments its term, and initiates
+elections it cannot win. When the partition heals, this node broadcasts
+an inflated term that unnecessarily forces the legitimate leader to step
+down.</p>
+<p>The Pre-Vote extension mitigates this issue by adding a preliminary
+verification phase:</p>
+<ol type="1">
+<li>Before incrementing its term or officially starting an election, a
+node sends a speculative "Pre-Vote" request to peers.</li>
+<li>Other nodes grant a speculative vote only if they have not heard
+from a valid leader within their election timeout window.</li>
+<li>If the candidate cannot contact a majority during the Pre-Vote
+phase, it does not increment its term and does not disrupt the active
+cluster.</li>
+</ol>
+<h3 id="leader-heartbeats-and-lease-mechanisms">Leader Heartbeats and
+Lease Mechanisms</h3>
+<p>To maintain safe read and write paths without querying the entire
+cluster for every operation, many Raft-based document stores implement
+leader leases or check-quorum policies:</p>
+<ul>
+<li><strong>Periodic Heartbeats:</strong> The leader continuously sends
+heartbeat messages to all followers within a configured timeout
+window.</li>
+<li><strong>Lease Expiration (Check-Quorum):</strong> If a leader fails
+to receive acknowledgments from a majority within the lease interval, it
+proactively revokes its own leadership.</li>
+<li><strong>Safe Reads:</strong> Stale reads are prevented because the
+leader will not serve local reads if its lease has lapsed, preventing an
+isolated former leader from serving outdated documents to clients.</li>
+</ul>
+<h3 id="joint-consensus-during-cluster-reconfiguration">Joint Consensus
+During Cluster Reconfiguration</h3>
+<p>Configuration changes, such as adding or removing database nodes,
+present a window where split-brain could manifest if two separate
+majorities overlap between old and new configurations. Raft avoids this
+via joint consensus:</p>
+<ul>
+<li>The cluster enters a transitional configuration requiring dual
+majorities: a majority of the old configuration <em>and</em> a majority
+of the new configuration must independently approve all decisions.</li>
+<li>Once the joint configuration is successfully committed into the Raft
+log across both majorities, the leader commits the final
+configuration.</li>
+<li>This ensures that no single point in time allows disjoint sets of
+nodes to independently elect two leaders.</li>
+</ul>
+<h3 id="storage-level-generation-ids-and-fencing">Storage-Level
+Generation IDs and Fencing</h3>
+<p>At the storage layer, Raft-based document stores pair Raft metadata
+with storage-engine fencing:</p>
+<ul>
+<li>Writes passed to the local storage engine include the associated
+Raft term and log index as fencing tokens.</li>
+<li>If an isolated leader attempts to write locally while disconnected,
+downstream components check the generation ID against the cluster's
+latest metadata.</li>
+<li>Any write referencing an expired term or uncommitted log sequence is
+rejected by the underlying storage engine, preventing phantom updates
+from persisting.</li>
+</ul></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/preventing-split-brain-in-raft-no-sql-databases';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

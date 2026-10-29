@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Indexing Nested Arrays and Sub-Documents in NoSQL - nosql</title>
+    <meta name="description" content="NoSQL document databases provide high performance on complex, hierarchical datasets by employing specialized indexing strategies for embedded structures. Rather than requiring users to normalize data, these engines utilize path-based dot-notation indexing">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/indexing-nested-arrays-and-sub-documents-in-no-sql">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Indexing Nested Arrays and Sub-Documents in NoSQL - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/indexing-nested-arrays-and-sub-documents-in-no-sql" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="NoSQL document databases provide high performance on complex, hierarchical datasets by employing specialized indexing strategies for embedded structures. Rather than requiring users to normalize data, these engines utilize path-based dot-notation indexing" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="indexing-nested-arrays-and-sub-documents-in-nosql">Indexing
+Nested Arrays and Sub-Documents in NoSQL</h1>
+<p>NoSQL document databases provide high performance on complex,
+hierarchical datasets by employing specialized indexing strategies for
+embedded structures. Rather than requiring users to normalize data,
+these engines utilize path-based dot-notation indexing for sub-documents
+and multikey or inverted indexing techniques for nested arrays. This
+article examines the mechanics of how document stores traverse, index,
+and query these deeply nested structures, along with the performance
+trade-offs associated with index size and write amplification.</p>
+<h3 id="indexing-nested-sub-documents">Indexing Nested
+Sub-Documents</h3>
+<p>Sub-documents (embedded objects) represent parent-child relationships
+within a single record. Document databases index these structures in two
+primary ways:</p>
+<ol type="1">
+<li><p><strong>Targeted Field Indexing (Dot Notation):</strong><br />
+The most common and performant approach is indexing a specific attribute
+within the embedded document using a path expression (e.g.,
+<code>address.zipCode</code>). The database treats the path as a
+distinct key within its underlying B-tree or LSM-tree structure. When an
+entry is written, the engine navigates to the specified path, extracts
+the scalar value, and maps it directly to the root document’s
+identifier. Queries targeting <code>address.zipCode</code> can traverse
+the index tree directly, bypassing the need to read or deserialize the
+parent document.</p></li>
+<li><p><strong>Whole Sub-Document Indexing:</strong><br />
+Most document stores also allow you to index the entire sub-document
+object (e.g., indexing <code>address</code>). In this case, the database
+serializes the entire nested structure into a single binary
+representation (such as BSON or JSON). However, querying an index on a
+whole sub-document requires an exact match, including field order. If a
+query provides <code>{ city: "Austin", zipCode: "78701" }</code>, but
+the document stored it as
+<code>{ zipCode: "78701", city: "Austin" }</code>, the index match will
+fail unless the engine normalizes key ordering before hashing or tree
+insertion. Consequently, whole-document indexing is rarely recommended
+over targeted path indexing.</p></li>
+</ol>
+<h3 id="indexing-nested-arrays-multikey-indexes">Indexing Nested Arrays
+(Multikey Indexes)</h3>
+<p>Arrays introduce cardinality challenges because a single document
+field can contain zero, dozens, or thousands of values. Document engines
+handle this via <strong>multikey indexing</strong>.</p>
+<ul>
+<li><strong>Array Flattening in the Index:</strong><br />
+When an index is created on an array field (e.g., <code>tags</code>),
+the database creates a separate index entry for every individual element
+in that array. If a document has the tags
+<code>["database", "nosql", "indexing"]</code>, the engine adds three
+distinct entries into the index structure, all pointing back to the same
+parent document ID.</li>
+<li><strong>Arrays of Sub-Documents:</strong><br />
+When indexing an array of objects (e.g., <code>items.sku</code>), the
+engine traverses each object in the array, extracts the specified field,
+and generates an index entry for each scalar value found. A query
+filtering for <code>items.sku = "A123"</code> performs a fast lookup in
+the index to locate any document containing an array element with that
+SKU.</li>
+</ul>
+<h3 id="indexing-limitations-and-cartesian-explosion">Indexing
+Limitations and Cartesian Explosion</h3>
+<p>To maintain efficiency, document stores impose strict rules on array
+indexing:</p>
+<ul>
+<li><strong>Compound Index Restrictions:</strong><br />
+Most document databases (such as MongoDB) forbid compound multikey
+indexes where more than one field is an array. For example, you cannot
+create a compound index on <code>users.tags</code> and
+<code>users.emails</code> if both are arrays within the same document.
+Allowing this would result in a Cartesian product of index entries
+(e.g., an array of 20 tags and 5 emails would produce 100 index entries
+for a single document), leading to severe index bloat and extreme write
+latency.</li>
+<li><strong>Write Amplification:</strong><br />
+Because an array with <span class="math inline">\(N\)</span> elements
+creates <span class="math inline">\(N\)</span> index keys, appending to
+or modifying an array incurs high write overhead. Updating an embedded
+list requires the database to remove old index keys and insert new ones
+across the index tree.</li>
+</ul>
+<h3 id="underlying-data-structures">Underlying Data Structures</h3>
+<p>Most document stores use <strong>B-Trees</strong> or
+<strong>Log-Structured Merge-Trees (LSM-Trees)</strong> to store
+path-indexed scalar values and multikey array elements. Search-oriented
+document stores (such as Elasticsearch) instead use <strong>Inverted
+Indexes</strong>, mapping array tokens to a posting list of document
+IDs. Regardless of the underlying structure, the fundamental strategy
+remains consistent: the database unpacks nested paths and array elements
+at write time so that lookups can occur in logarithmic time rather than
+requiring a full collection scan.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/indexing-nested-arrays-and-sub-documents-in-no-sql';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

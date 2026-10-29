@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Why High-Frequency Trading Uses In-Memory NoSQL Stores - nosql</title>
+    <meta name="description" content="High-frequency trading (HFT) platforms rely on executing massive volumes of orders in microseconds, making traditional disk-based databases a critical performance bottleneck. This article examines why in-memory NoSQL data stores have become the standard a">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/why-high-frequency-trading-uses-in-memory-no-sql-stores">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Why High-Frequency Trading Uses In-Memory NoSQL Stores - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/why-high-frequency-trading-uses-in-memory-no-sql-stores" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="High-frequency trading (HFT) platforms rely on executing massive volumes of orders in microseconds, making traditional disk-based databases a critical performance bottleneck. This article examines why in-memory NoSQL data stores have become the standard a" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="why-high-frequency-trading-uses-in-memory-nosql-stores">Why
+High-Frequency Trading Uses In-Memory NoSQL Stores</h1>
+<p>High-frequency trading (HFT) platforms rely on executing massive
+volumes of orders in microseconds, making traditional disk-based
+databases a critical performance bottleneck. This article examines why
+in-memory NoSQL data stores have become the standard architecture in
+HFT, focusing on the elimination of I/O latency, the reduction of
+tail-latency jitter, the flexibility of non-relational schemas for
+rapidly changing market data, and the concurrency models required to
+handle millions of transactions per second.</p>
+<h3 id="elimination-of-storage-io-latency">Elimination of Storage I/O
+Latency</h3>
+<p>In algorithmic and high-frequency trading, financial gains depend on
+order placement speed. Accessing data from Random Access Memory (RAM)
+takes tens of nanoseconds, whereas reading from enterprise NVMe
+solid-state drives takes tens of microseconds—a performance gap of
+roughly three orders of magnitude. In-memory NoSQL stores keep the
+entire active dataset in volatile memory, avoiding operating system page
+faults, disk controller overhead, and physical bus transfer bottlenecks
+on the critical execution path.</p>
+<h3 id="predictable-tail-latency-and-reduced-jitter">Predictable Tail
+Latency and Reduced Jitter</h3>
+<p>For HFT systems, deterministic latency is just as vital as low
+average latency. Disk-based systems suffer from unpredictable latency
+spikes (tail latency) caused by background maintenance tasks such as log
+flushing, write-amplification cycles, cache evictions, and file system
+defragmentation. In-memory stores mitigate these I/O wait states,
+allowing trading algorithms to read and update order books with
+consistent sub-millisecond or sub-microsecond response times, preventing
+costly slippage.</p>
+<h3 id="high-throughput-and-lock-free-concurrency">High Throughput and
+Lock-Free Concurrency</h3>
+<p>Market data engines must process millions of quote updates and market
+ticks per second during peak trading periods. In-memory NoSQL databases
+are typically built using lock-free data structures, single-threaded
+event loops (such as Redis), or partitioned actor models. This
+architecture eliminates the heavy locking mechanisms and thread
+contention common in relational disk-based engines, maximizing
+throughput across modern multi-core processors.</p>
+<h3 id="schema-flexibility-for-dynamic-financial-protocols">Schema
+Flexibility for Dynamic Financial Protocols</h3>
+<p>Trading systems ingest heterogeneous data from various liquidity
+providers, exchanges, and brokers, each using different protocols and
+formats (such as FIX, ITCH, or native binary protocols). NoSQL
+systems—especially key-value and document models—allow developers to
+store sparse, nested, and polymorphic data without the performance
+overhead of relational joins, schema migrations, or rigid table
+constraints. Fast lookups on un-normalized tick and order book
+structures reduce processing overhead during active market hours.</p>
+<h3 id="decoupled-durability-and-asynchronous-persistence">Decoupled
+Durability and Asynchronous Persistence</h3>
+<p>HFT applications do not compromise processing speed to achieve
+transactional durability. While disk-based relational systems enforce
+immediate write-ahead logging (WAL) and synchronous disk commits (ACID
+properties), in-memory NoSQL stores decouple operational execution from
+persistence. Data is modified instantly in memory, while persistence is
+handled asynchronously via background snapshotting, distributed
+replication, or non-volatile memory (NVRAM). If an algorithmic node
+crashes, state can be rebuilt rapidly from upstream market feeds or
+network state replicas without having blocked execution during
+trading.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/why-high-frequency-trading-uses-in-memory-no-sql-stores';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

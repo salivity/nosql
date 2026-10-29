@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Graph Databases Handle Node Deletion - nosql</title>
+    <meta name="description" content="Graph NoSQL databases rely on index-free adjacency, where nodes maintain direct physical or logical memory references to their connected edges. When a node is deleted, leaving these pointer references intact causes dangling pointers and storage corruption">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/how-graph-databases-handle-node-deletion">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Graph Databases Handle Node Deletion - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/how-graph-databases-handle-node-deletion" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Graph NoSQL databases rely on index-free adjacency, where nodes maintain direct physical or logical memory references to their connected edges. When a node is deleted, leaving these pointer references intact causes dangling pointers and storage corruption" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-graph-databases-handle-node-deletion">How Graph Databases
+Handle Node Deletion</h1>
+<p>Graph NoSQL databases rely on index-free adjacency, where nodes
+maintain direct physical or logical memory references to their connected
+edges. When a node is deleted, leaving these pointer references intact
+causes dangling pointers and storage corruption. To handle deletions
+safely, graph engines employ several core strategies: mandatory
+cascading edge deletions, transactional two-phase locks, tombstone-based
+soft deletion with asynchronous compaction, and doubly linked
+relationship chains.</p>
+<h3 id="cascade-deletion-requirements">Cascade Deletion
+Requirements</h3>
+<p>Most native graph engines (such as Neo4j) enforce referential
+integrity by prohibiting the deletion of a node that still has attached
+relationships. If a user attempts to remove a node without removing its
+edges, the engine aborts the transaction with a constraint
+violation.</p>
+<p>To delete a node successfully, systems execute an explicit
+cascade—often triggered via commands like <code>DETACH DELETE</code>.
+Under this process:</p>
+<ol type="1">
+<li>The database reads the node's pointer head for its relationship
+chain.</li>
+<li>It traverses all incoming and outgoing edge records connected to the
+node.</li>
+<li>It de-allocates or unlinks those edge records from the opposing
+adjacent nodes.</li>
+<li>Finally, it removes the target node record itself.</li>
+</ol>
+<h3 id="updating-doubly-linked-relationship-chains">Updating Doubly
+Linked Relationship Chains</h3>
+<p>In native graph storage formats, relationships are typically
+structured as doubly linked lists. An edge record stores pointers
+to:</p>
+<ul>
+<li>The source node and target node.</li>
+<li>The next and previous relationship pointers for the source
+node.</li>
+<li>The next and previous relationship pointers for the target
+node.</li>
+</ul>
+<p>When a node and its edges are removed, the database updates the
+adjacent surviving nodes. The storage engine rewrites the
+<code>next</code> or <code>previous</code> pointers of the surrounding
+edges in the surviving node's relationship list to skip the edge being
+removed, mimicking standard linked-list item deletion. If the deleted
+edge was the list head, the node record's pointer is updated to point
+directly to the subsequent edge.</p>
+<h3 id="acid-transactions-and-pessimistic-locking">ACID Transactions and
+Pessimistic Locking</h3>
+<p>To prevent race conditions where another query attempts to traverse
+an edge while its target node is being purged, graph databases use
+transactional isolation:</p>
+<ul>
+<li><strong>Exclusive Locks:</strong> The engine places an exclusive
+write lock on the target node, all incident edges, and the neighboring
+nodes connected to those edges.</li>
+<li><strong>Atomic Operations:</strong> All pointer updates across the
+affected nodes and edges are written to a Write-Ahead Log (WAL) or
+transaction journal before being applied to the storage files.</li>
+<li>If a failure occurs mid-operation, the WAL rolls back the pointer
+updates, preventing orphaned or broken memory addresses.</li>
+</ul>
+<h3 id="tombstoning-and-asynchronous-garbage-collection">Tombstoning and
+Asynchronous Garbage Collection</h3>
+<p>Non-native or distributed graph databases (such as those built on top
+of LSM-tree key-value stores like RocksDB or Cassandra) often avoid
+immediate physical pointer rewrites due to the high I/O cost of random
+writes:</p>
+<ul>
+<li><strong>Tombstones:</strong> The system writes a deletion marker
+("tombstone") over the node's key.</li>
+<li><strong>Read-Time Filtering:</strong> When a traversal crosses an
+edge to a tombstoned node, the query engine detects the tombstone and
+discards that traversal path dynamically.</li>
+<li><strong>Compaction:</strong> During background storage compaction,
+the engine scans the data files, physically removes the tombstoned
+nodes, and purges any edge keys that reference the deleted node ID.</li>
+</ul>
+<h3 id="memory-id-recycling-safeguards">Memory ID Recycling
+Safeguards</h3>
+<p>Graph databases assign unique record IDs to nodes, which directly
+correspond to file offsets. When a node is deleted, its record slot is
+marked as free for reuse. To prevent existing references from mistakenly
+pointing to new data that reoccupies that slot, databases retain
+generation counters or cycle IDs. If an operation reads a record whose
+generation counter does not match the pointer's expected generation, the
+database invalidates the traversal rather than loading corrupted
+data.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/how-graph-databases-handle-node-deletion';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

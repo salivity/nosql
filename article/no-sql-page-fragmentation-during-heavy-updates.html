@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NoSQL Page Fragmentation During Heavy Updates - nosql</title>
+    <meta name="description" content="Document NoSQL databases face significant performance degradation when heavy update workloads cause documents to grow beyond their allocated disk space, resulting in internal and external page fragmentation. To maintain read/write throughput and prevent s">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/no-sql-page-fragmentation-during-heavy-updates">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="NoSQL Page Fragmentation During Heavy Updates - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/no-sql-page-fragmentation-during-heavy-updates" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Document NoSQL databases face significant performance degradation when heavy update workloads cause documents to grow beyond their allocated disk space, resulting in internal and external page fragmentation. To maintain read/write throughput and prevent s" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="nosql-page-fragmentation-during-heavy-updates">NoSQL Page
+Fragmentation During Heavy Updates</h1>
+<p>Document NoSQL databases face significant performance degradation
+when heavy update workloads cause documents to grow beyond their
+allocated disk space, resulting in internal and external page
+fragmentation. To maintain read/write throughput and prevent storage
+bloat, modern document engines employ several architectural strategies,
+including dynamic record padding, Copy-on-Write (CoW) with Multi-Version
+Concurrency Control (MVCC), Log-Structured Merge-tree (LSM) append
+models, and automated background compaction. Understanding these
+mechanisms reveals how distributed document stores balance memory
+overhead, write amplification, and I/O latency under demanding update
+scenarios.</p>
+<h3 id="the-mechanics-of-fragmentation-in-document-stores">The Mechanics
+of Fragmentation in Document Stores</h3>
+<p>Unlike relational databases with fixed-width schemas, document
+databases (such as MongoDB, Couchbase, or CouchDB) store semi-structured
+JSON-like payloads (e.g., BSON) whose size fluctuates as fields are
+modified, added, or appended to arrays.</p>
+<p>When a document update increases the record's byte size beyond the
+contiguous free space available on its underlying storage page:</p>
+<ul>
+<li><strong>Record Relocation:</strong> The engine must relocate the
+entire document to a new page, leaving empty, unusable gaps (internal
+fragmentation) in the original page.</li>
+<li><strong>Page Splits:</strong> If the destination page cannot
+accommodate the record, the engine splits the B-Tree node or storage
+page into multiple smaller pages, which introduces pointer overhead and
+spreads related data across discontinuous disk blocks (external
+fragmentation).</li>
+</ul>
+<h3 id="in-place-updates-and-dynamic-padding">In-Place Updates and
+Dynamic Padding</h3>
+<p>Early storage architectures handled record growth using fixed or
+dynamic padding factors. When allocating space for a new document, the
+engine reserved extra contiguous bytes based on statistical predictions
+of future record expansion (e.g., power-of-two allocations).</p>
+<p>While padding enables updates to occur in place without triggering
+page splits, it introduces significant memory and disk waste if the
+documents remain static. Consequently, modern storage engines have
+largely moved away from static pre-allocation schemes in favor of more
+sophisticated buffer management and out-of-place write strategies.</p>
+<h3 id="copy-on-write-and-mvcc-wiredtiger-model">Copy-on-Write and MVCC
+(WiredTiger Model)</h3>
+<p>Engines like MongoDB's WiredTiger mitigate page fragmentation by
+treating storage pages as immutable snapshots in disk storage and
+performing updates via Multi-Version Concurrency Control (MVCC) in
+memory:</p>
+<ol type="1">
+<li><strong>In-Memory Modifications:</strong> Updates are applied to an
+in-memory representation of the page without altering the physical page
+on disk. Multiple updates to the same document are reconciled in
+RAM.</li>
+<li><strong>Reconciliation at Checkpoints:</strong> During periodic
+checkpoints, the engine reconciles in-memory modifications, resolves
+dirty pages, and writes freshly packed, contiguous blocks to new
+locations on disk.</li>
+<li><strong>Block Allocation:</strong> WiredTiger utilizes a first-fit
+or best-fit block manager to reuse free blocks from previous
+checkpoints. Because blocks are rewritten sequentially during checkpoint
+flushes rather than updated piecemeal on disk, the engine naturally
+defragments data during the write process.</li>
+</ol>
+<h3 id="append-only-storage-log-structured-approaches">Append-Only
+Storage (Log-Structured Approaches)</h3>
+<p>Some document databases, such as Apache CouchDB and engines using
+LSM-trees (like RocksDB-backed variants), avoid in-place page
+fragmentation entirely by treating storage as an append-only log:</p>
+<ul>
+<li><strong>Immutable Writes:</strong> When a document is updated, the
+engine appends the new version along with its updated metadata to the
+end of the current file segment or active memtable. The original page
+remains completely untouched.</li>
+<li><strong>Zero In-Place Page Splits:</strong> Because existing pages
+are never modified or enlarged, page splits caused by size growth do not
+occur.</li>
+<li><strong>Tombstones:</strong> Previous versions of documents are
+logically marked as obsolete (tombstoned). The trade-off is that this
+approach shifts the fragmentation problem from page-level fragmentation
+to storage-level fragmentation, as stale versions accumulate over
+time.</li>
+</ul>
+<h3 id="background-compaction-and-free-list-recycling">Background
+Compaction and Free-List Recycling</h3>
+<p>Regardless of whether an engine uses MVCC or append-only
+architectures, heavy updates eventually generate dead space from deleted
+or relocated document versions. Document engines manage this through
+distinct reclamation strategies:</p>
+<ul>
+<li><strong>Free Lists:</strong> Storage engines maintain internal
+catalogs of empty or partially filled pages (free lists). When new
+documents are inserted or expanded records are moved, the engine queries
+the free list to reuse existing capacity before requesting new disk
+blocks from the OS.</li>
+<li><strong>Online Compaction (Vacuuming):</strong> Background threads
+periodically read fragmented pages or append-only data files, strip out
+tombstoned and superseded versions, pack surviving records into
+contiguous memory buffers, and write clean, fully utilized pages to
+disk. Once completed, the original, fragmented blocks are returned to
+the filesystem or the engine's free list.</li>
+<li><strong>Hole Punching:</strong> On filesystems that support sparse
+files, engines can issue <code>fallocate</code> with hole-punching flags
+to release empty blocks back to the underlying operating system without
+rebuilding entire collections.</li>
+</ul></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/no-sql-page-fragmentation-during-heavy-updates';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

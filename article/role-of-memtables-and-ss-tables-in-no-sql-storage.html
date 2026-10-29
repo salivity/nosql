@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Role of Memtables and SSTables in NoSQL Storage - nosql</title>
+    <meta name="description" content="Memtables and Sorted String Tables (SSTables) are the foundational building blocks of Log-Structured Merge-tree (LSM-tree) storage architectures used by distributed NoSQL databases like Apache Cassandra, RocksDB, and ScyllaDB. This article explores how th">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/role-of-memtables-and-ss-tables-in-no-sql-storage">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Role of Memtables and SSTables in NoSQL Storage - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/role-of-memtables-and-ss-tables-in-no-sql-storage" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Memtables and Sorted String Tables (SSTables) are the foundational building blocks of Log-Structured Merge-tree (LSM-tree) storage architectures used by distributed NoSQL databases like Apache Cassandra, RocksDB, and ScyllaDB. This article explores how th" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="role-of-memtables-and-sstables-in-nosql-storage">Role of
+Memtables and SSTables in NoSQL Storage</h1>
+<p>Memtables and Sorted String Tables (SSTables) are the foundational
+building blocks of Log-Structured Merge-tree (LSM-tree) storage
+architectures used by distributed NoSQL databases like Apache Cassandra,
+RocksDB, and ScyllaDB. This article explores how these two data
+structures operate in tandem to deliver high-throughput write
+performance, guarantee data durability, and manage the lifecycle of data
+from fast volatile memory to persistent disk storage.</p>
+<h3 id="the-role-of-the-memtable">The Role of the Memtable</h3>
+<p>A memtable (memory table) is an in-memory, write-buffering data
+structure. When a write, update, or delete request enters an LSM-based
+NoSQL system, the database routes the data to the memtable after
+recording it in a sequential Write-Ahead Log (WAL) for crash
+recovery.</p>
+<p>Key roles and characteristics of the memtable include:</p>
+<ul>
+<li><strong>In-Memory Sorting:</strong> As writes arrive, the memtable
+stores them in sorted order by key, typically using data structures like
+skip lists, red-black trees, or AVL trees. Maintaining sorted data in
+memory removes the need for costly in-place random disk writes.</li>
+<li><strong>Low-Latency Writes:</strong> Because operations occur
+entirely in RAM, the write path achieves microsecond-level latency.</li>
+<li><strong>Serving Recent Reads:</strong> The memtable serves as the
+first stop for read queries. Because it contains the freshest version of
+newly written data, queries can often be resolved directly from memory
+without disk access.</li>
+</ul>
+<h3 id="the-role-of-the-sstable">The Role of the SSTable</h3>
+<p>An SSTable (Sorted String Table) is an immutable, on-disk storage
+format that holds key-value pairs sorted by key. Once a memtable reaches
+a predefined size threshold or time limit, the database freezes it,
+creates a new active memtable for incoming writes, and flushes the
+frozen memtable to disk as a new SSTable.</p>
+<p>Key roles and characteristics of SSTables include:</p>
+<ul>
+<li><strong>Sequential Disk I/O:</strong> Because the memtable is
+already sorted, flushing to an SSTable requires only sequential writes,
+which maximizes disk throughput on both hard disk drives (HDDs) and
+solid-state drives (SSDs).</li>
+<li><strong>Immutability:</strong> SSTables are never modified in place.
+Immutability eliminates concurrency issues, locks, and complex
+transaction management for disk reads, while simplifying background
+replication and backups.</li>
+<li><strong>Auxiliary Data Structures:</strong> To optimize reads across
+multiple SSTables, databases pair SSTables with auxiliary structures:
+<ul>
+<li><strong>Bloom Filters:</strong> Fast, probabilistic in-memory
+filters that determine whether a specific key definitely does not exist
+in an SSTable, preventing unnecessary disk seeks.</li>
+<li><strong>Partition Indexes:</strong> Index files that map key ranges
+to specific block offsets within the SSTable data file.</li>
+</ul></li>
+</ul>
+<h3 id="how-memtables-and-sstables-work-together">How Memtables and
+SSTables Work Together</h3>
+<p>The coordination between memtables and SSTables governs the core read
+and write paths in LSM-tree systems:</p>
+<ol type="1">
+<li><strong>The Write Path:</strong> Writes are sequentially appended to
+the commit log (WAL) on disk and inserted into the active memtable. No
+existing SSTables are read or updated during a write, which ensures
+sustained high write throughput.</li>
+<li><strong>The Flush Process:</strong> When a memtable fills up, it
+transitions to a read-only state and is asynchronously written to disk
+as a base SSTable file. Once flushed, the corresponding segment of the
+WAL is discarded.</li>
+<li><strong>The Read Path:</strong> Reads first check the active and
+flushing memtables. If the requested key is not present, the system
+checks SSTables from newest to oldest, using Bloom filters to skip
+non-relevant SSTables and indexes to locate the exact data block within
+valid SSTables.</li>
+<li><strong>Compaction:</strong> Over time, flushes produce numerous
+SSTables containing duplicate updates, outdated records, and tombstones
+(markers for deleted data). A background compaction process reads
+multiple sorted SSTables, merges them by resolving conflicts using the
+latest timestamps, discards deleted records, and writes out
+consolidated, sorted SSTables. This prevents read degradation and
+reclaims disk space.</li>
+</ol></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/role-of-memtables-and-ss-tables-in-no-sql-storage';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Modeling Edge Direction and Properties in Graph DBs - nosql</title>
+    <meta name="description" content="This article provides an overview of how graph NoSQL databases represent and manipulate relationships between entities. It explores the mechanics of edge directionality, detailing how systems store directed connections while allowing flexible bidirectiona">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/modeling-edge-direction-and-properties-in-graph-d-bs">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Modeling Edge Direction and Properties in Graph DBs - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/modeling-edge-direction-and-properties-in-graph-d-bs" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article provides an overview of how graph NoSQL databases represent and manipulate relationships between entities. It explores the mechanics of edge directionality, detailing how systems store directed connections while allowing flexible bidirectiona" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="modeling-edge-direction-and-properties-in-graph-dbs">Modeling
+Edge Direction and Properties in Graph DBs</h1>
+<p>This article provides an overview of how graph NoSQL databases
+represent and manipulate relationships between entities. It explores the
+mechanics of edge directionality, detailing how systems store directed
+connections while allowing flexible bidirectional traversals.
+Additionally, it examines how modern property graph models assign rich
+metadata—such as weights, timestamps, and contextual attributes—directly
+to relationship edges as first-class citizens without sacrificing
+traversal performance.</p>
+<h2 id="the-foundation-the-property-graph-model">The Foundation: The
+Property Graph Model</h2>
+<p>Most native graph NoSQL databases (such as Neo4j, Amazon Neptune, and
+Memgraph) implement the Labeled Property Graph (LPG) model. In an LPG,
+data consists of nodes (entities), relationships (edges), labels
+(categories), and properties (key-value pairs).</p>
+<p>Unlike relational databases that simulate relationships using foreign
+keys and join tables, graph systems treat edges as first-class,
+independent entities. An edge must have a unique identifier, an explicit
+start node, an explicit end node, and a type label that defines the
+nature of the connection.</p>
+<h2 id="how-graph-databases-model-edge-directionality">How Graph
+Databases Model Edge Directionality</h2>
+<p>Graph NoSQL systems predominantly enforce directed graphs at the
+storage layer. Every edge physically points from a source node (tail) to
+a target node (head).</p>
+<h3 id="storage-mechanism-and-index-free-adjacency">Storage Mechanism
+and Index-Free Adjacency</h3>
+<p>To model direction efficiently, graph databases employ index-free
+adjacency. Each node directly holds references (pointers) to its
+incoming and outgoing edges, typically organized as doubly linked lists
+or compact arrays:</p>
+<ul>
+<li><strong>Outgoing pointers:</strong> A node maintains an out-edge
+pointer pointing to the first relationship where it acts as the
+source.</li>
+<li><strong>Incoming pointers:</strong> A node maintains an in-edge
+pointer pointing to the first relationship where it acts as the
+target.</li>
+<li><strong>Edge records:</strong> Each edge record stores the memory
+addresses of its source node, target node, the next outgoing edge for
+the source, and the next incoming edge for the target.</li>
+</ul>
+<h3 id="bidirectional-traversal">Bidirectional Traversal</h3>
+<p>Although every edge is strictly directed in storage, graph query
+engines (like Cypher or Gremlin) decouple logical traversal from
+physical direction. Traversal algorithms can navigate:</p>
+<ul>
+<li><strong>Outbound:</strong> Traversing from source to target.</li>
+<li><strong>Inbound:</strong> Traversing from target to source.</li>
+<li><strong>Undirected:</strong> Traversing regardless of
+direction.</li>
+</ul>
+<p>Because incoming and outgoing pointers are indexed at the node level,
+moving against the edge direction incurs no performance overhead.
+Consequently, modeling truly symmetric relationships (such as a
+"friendship" or "sibling" relation) rarely requires creating two
+opposing edges. Engineers typically create a single directed edge and
+query it without specifying direction.</p>
+<h2 id="modeling-properties-on-relationship-edges">Modeling Properties
+on Relationship Edges</h2>
+<p>In many data models, relationships carry vital contextual information
+that cannot logically belong to either connected node. Graph databases
+solve this by allowing edges to hold key-value attributes directly.</p>
+<h3 id="internal-edge-property-representation">Internal Edge Property
+Representation</h3>
+<p>Edge properties are stored similarly to node properties:</p>
+<ol type="1">
+<li><strong>Pointer to Property Chains:</strong> The edge record
+contains a property pointer addressing a singly linked list or block of
+property records in a dedicated property store file.</li>
+<li><strong>Key-Value Pairs:</strong> Each property record holds a key
+(often resolved via an internal schema dictionary to save space), the
+primitive data type, and the value (or a pointer to dynamic storage for
+large strings and arrays).</li>
+<li><strong>Immutability and Modification:</strong> Updating or adding a
+property to an edge modifies these property chains without changing the
+structural pointers between the connected nodes.</li>
+</ol>
+<h3 id="practical-schema-example">Practical Schema Example</h3>
+<p>Consider a transaction in an e-commerce context:</p>
+<ul>
+<li><strong>Node A:</strong>
+<code>(:Customer {id: "cust_123", name: "Alice"})</code></li>
+<li><strong>Node B:</strong>
+<code>(:Product {sku: "PROD_99", name: "Laptop"})</code></li>
+<li><strong>Edge:</strong>
+<code>[:PURCHASED {order_id: "ORD_789", timestamp: 1698240000, price: 1299.99, status: "completed"}]</code></li>
+</ul>
+<p>In this example, the edge represents both the association and the
+transaction data. Filtering queries by edge attributes—such as finding
+all purchases over $1,000 made in the last month—evaluates these
+properties during relationship traversal rather than through heavy
+relational joins.</p>
+<h2 id="advantages-over-alternative-architectures">Advantages Over
+Alternative Architectures</h2>
+<p>The ability to natively store properties and direction on edges
+distinguishes property graphs from other paradigms:</p>
+<ul>
+<li><strong>Versus Relational Databases:</strong> Eliminates costly
+multi-table joins. In an RDBMS, edge properties require a distinct join
+table with its own primary and foreign key indexes.</li>
+<li><strong>Versus Basic RDF Triples:</strong> Traditional Resource
+Description Framework (RDF) models store data as
+<code>Subject -&gt; Predicate -&gt; Object</code>. They cannot naturally
+attach properties to predicates without complex reification or the newer
+RDF-star extension.</li>
+<li><strong>Query Efficiency:</strong> Edge properties allow query
+engines to prune traversal paths early. If an algorithm seeks paths
+where an edge property satisfies a condition (such as
+<code>distance &lt; 50</code>), it can discard irrelevant subgraphs
+immediately upon inspecting the edge record.</li>
+</ul></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/modeling-edge-direction-and-properties-in-graph-d-bs';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

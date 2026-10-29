@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Memtable Flushing in NoSQL During Write Spikes - nosql</title>
+    <meta name="description" content="Wide-column NoSQL databases like Apache Cassandra and ScyllaDB rely on Log-Structured Merge-tree (LSM-tree) architectures to absorb massive write throughput. During sudden write spikes, these engines maintain low-latency writes by buffering data in memory">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/memtable-flushing-in-no-sql-during-write-spikes">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Memtable Flushing in NoSQL During Write Spikes - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/memtable-flushing-in-no-sql-during-write-spikes" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Wide-column NoSQL databases like Apache Cassandra and ScyllaDB rely on Log-Structured Merge-tree (LSM-tree) architectures to absorb massive write throughput. During sudden write spikes, these engines maintain low-latency writes by buffering data in memory" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="memtable-flushing-in-nosql-during-write-spikes">Memtable
+Flushing in NoSQL During Write Spikes</h1>
+<p>Wide-column NoSQL databases like Apache Cassandra and ScyllaDB rely
+on Log-Structured Merge-tree (LSM-tree) architectures to absorb massive
+write throughput. During sudden write spikes, these engines maintain
+low-latency writes by buffering data in memory within structures called
+memtables while logging them sequentially to disk in a CommitLog. When
+write volumes threaten to exhaust memory, the database rapidly
+transitions active memtables into immutable states, queues them for
+sequential disk serialization as Sorted String Tables (SSTables), and
+uses adaptive backpressure to throttle incoming traffic if disk I/O
+falls behind.</p>
+<h3 id="the-role-of-memtables-in-lsm-tree-writes">The Role of Memtables
+in LSM-Tree Writes</h3>
+<p>When a write operation reaches a wide-column store node, it executes
+two steps:</p>
+<ol type="1">
+<li>It appends the mutation to a Write-Ahead Log (CommitLog) on disk for
+durability.</li>
+<li>It writes the mutation to an in-memory sorted structure known as a
+memtable.</li>
+</ol>
+<p>Because both the CommitLog append and the memtable write occur
+sequentially in memory and on disk, writes execute with sub-millisecond
+latency. However, because system RAM is finite, memtables must
+periodically flush their contents to persistent storage as immutable
+SSTables.</p>
+<h3 id="flush-triggers-during-write-spikes">Flush Triggers During Write
+Spikes</h3>
+<p>Engines monitor several thresholds to decide when to trigger a
+flush:</p>
+<ul>
+<li><strong>Capacity Thresholds:</strong> When an individual memtable
+reaches a predefined size limit (typically configured via heap or
+off-heap allocations).</li>
+<li><strong>Global Memory Pressure:</strong> When total memory allocated
+across all active memtables exceeds safe limits, triggering the flush of
+the largest memtables first to prevent Out-Of-Memory (OOM) errors.</li>
+<li><strong>CommitLog Saturation:</strong> If the sequential write log
+approaches its segment size limits, the engine must flush older
+memtables to allow older CommitLog segments to be safely deleted or
+recycled.</li>
+</ul>
+<h3 id="the-flushing-mechanism-under-load">The Flushing Mechanism Under
+Load</h3>
+<p>When a write spike triggers a flush, the database executes an
+asynchronous pipeline designed to keep the write path unblocked:</p>
+<ol type="1">
+<li><strong>Memtable Freezing:</strong> The active memtable is
+immediately marked as immutable ("frozen"). Concurrently, the engine
+instantiates a clean, mutable memtable to accept new incoming writes
+without interruption.</li>
+<li><strong>Handoff to Flush Queues:</strong> The frozen memtable is
+handed off to an internal flush queue managed by a dedicated thread
+pool.</li>
+<li><strong>Sequential I/O Serialization:</strong> Flush worker threads
+iterate through the sorted data in the frozen memtable, serializing it
+into an immutable SSTable on disk. Because the in-memory data is already
+sorted, the disk write is entirely sequential, maximizing disk
+throughput.</li>
+<li><strong>CommitLog Truncation and Indexing:</strong> Once the SSTable
+is written, the database updates its partition index, bloom filters, and
+summary files, then releases the frozen memtable's memory back to the
+operating system or heap. The corresponding sections in the CommitLog
+are flagged for reclamation.</li>
+</ol>
+<h3 id="mitigating-io-bottlenecks-and-compaction-contention">Mitigating
+I/O Bottlenecks and Compaction Contention</h3>
+<p>Under severe write spikes, flush operations must compete with
+compaction processes for storage bandwidth. To prevent flushes from
+stalling, modern engines apply specific prioritization rules:</p>
+<ul>
+<li><strong>I/O Prioritization:</strong> Engines prioritize memtable
+flushes over background compactions. Because delayed flushes risk
+filling up system RAM, compaction tasks are paused, throttled, or
+assigned to lower-priority I/O classes.</li>
+<li><strong>Off-Heap Storage:</strong> Modern implementations store
+memtables partially or entirely off-heap. This avoids excessive Java
+Virtual Machine (JVM) garbage collection pauses when memory churn
+accelerates during spikes.</li>
+</ul>
+<h3 id="backpressure-and-flow-control">Backpressure and Flow
+Control</h3>
+<p>If the disk subsystem cannot write SSTables as fast as incoming
+writes generate them, the system activates defensive backpressure
+mechanisms:</p>
+<ul>
+<li><strong>Thread Pool Saturation:</strong> If the flush queue exceeds
+capacity, the database blocks new write operations from allocating
+further memtables.</li>
+<li><strong>Client Throttling:</strong> Incoming write requests are
+stalled at the coordinator or transport layer. Clients experience
+increased latency, preventing the cluster nodes from crashing due to
+memory exhaustion.</li>
+<li><strong>Drop Policies:</strong> In extreme scenarios where native
+backpressure fails to slow down write volume, coordinators may shed load
+by dropping timed-out requests or rejecting connections with
+<code>OverloadedException</code> errors until the flush queue
+drains.</li>
+</ul></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/memtable-flushing-in-no-sql-during-write-spikes';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

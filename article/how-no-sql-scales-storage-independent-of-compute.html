@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How NoSQL Scales Storage Independent of Compute - nosql</title>
+    <meta name="description" content="Modern distributed applications frequently experience asymmetric resource demands where data volume grows significantly faster than processing requirements. While traditional NoSQL engines relied on tightly coupled shared-nothing architectures—requiring o">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/how-no-sql-scales-storage-independent-of-compute">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How NoSQL Scales Storage Independent of Compute - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/how-no-sql-scales-storage-independent-of-compute" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Modern distributed applications frequently experience asymmetric resource demands where data volume grows significantly faster than processing requirements. While traditional NoSQL engines relied on tightly coupled shared-nothing architectures—requiring o" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-nosql-scales-storage-independent-of-compute">How NoSQL
+Scales Storage Independent of Compute</h1>
+<p>Modern distributed applications frequently experience asymmetric
+resource demands where data volume grows significantly faster than
+processing requirements. While traditional NoSQL engines relied on
+tightly coupled shared-nothing architectures—requiring organizations to
+provision expensive compute nodes simply to acquire more disk
+space—modern systems decouple these layers. By isolating stateless
+execution engines from persistent data layers, modern NoSQL databases
+allow storage to scale to petabytes on low-cost media while compute
+resources dynamically resize based on real-time query throughput.</p>
+<h3 id="disaggregated-storage-architecture">Disaggregated Storage
+Architecture</h3>
+<p>The foundational mechanism enabling independent scaling is
+disaggregation: physically separating processing nodes from persistent
+media across high-speed network fabrics. Instead of binding data
+partitions to local solid-state drives, modern NoSQL databases write
+data to shared distributed file systems, network-attached block stores,
+or cloud object stores (such as Amazon S3, Google Cloud Storage, or
+Ceph). Because the underlying storage system functions as an elastic,
+multi-tenant utility, database nodes do not own physical disks; they
+access an effectively infinite remote storage layer over standard
+network protocols.</p>
+<h3 id="stateless-query-and-processing-nodes">Stateless Query and
+Processing Nodes</h3>
+<p>To divorce compute from storage, database processing engines are
+redesigned to be largely stateless. Nodes responsible for parsing
+queries, executing aggregations, coordinating transactions, and routing
+requests do not maintain persistent copies of partition data. If write
+traffic spikes, an operator can provision dozens of additional compute
+nodes that immediately begin processing operations without undergoing
+lengthy data rebalancing or partition copying. Conversely, during
+low-activity periods, compute capacity can be scaled down to near zero
+while the stored data remains untouched and durable in the underlying
+storage pool.</p>
+<h3 id="immutable-data-formats-and-lsm-trees">Immutable Data Formats and
+LSM-Trees</h3>
+<p>Many NoSQL databases rely on Log-Structured Merge-trees (LSM-trees)
+or append-only commit logs, which fit naturally into decoupled
+architectures. Write operations are first collected in transient
+compute-tier memory buffers (memtables) and write-ahead logs. Once these
+buffers reach capacity, they are flushed to storage as immutable data
+files (such as SSTables or Parquet-like columnar chunks). Because these
+files are read-only and never modified in place, they can be safely
+stored on cloud object storage. New data creates new files, and
+compaction processes merge files asynchronously in the background—often
+offloaded to dedicated background workers rather than user-facing
+compute nodes.</p>
+<h3 id="decoupled-metadata-catalogs">Decoupled Metadata Catalogs</h3>
+<p>Decoupled systems rely on a centralized or consensus-driven metadata
+catalog to map database keyspaces to specific files located in remote
+storage. Systems like FoundationDB or dedicated Raft-based clusters
+maintain the manifest of which SSTables contain which key ranges. When a
+compute node needs to process a query, it queries this metadata layer to
+identify the exact files it needs to read from the storage pool. This
+design ensures that compute nodes can be spun up or down dynamically, as
+any node can read any part of the dataset simply by consulting the
+global metadata layer.</p>
+<h3 id="intelligent-ephemeral-caching">Intelligent Ephemeral
+Caching</h3>
+<p>Because reading data over a network adds latency compared to local
+disk access, decoupled NoSQL engines implement multi-tiered caching
+strategies. Compute nodes utilize high-speed local RAM and local NVMe
+drives purely as ephemeral caches for hot data and index blocks. If a
+compute node terminates, no data is lost because the local drive
+contains only transient cache entries. The primary source of truth
+remains the remote storage tier, allowing compute instances to be
+treated as disposable, fungible assets that scale strictly on
+demand.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/how-no-sql-scales-storage-independent-of-compute';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

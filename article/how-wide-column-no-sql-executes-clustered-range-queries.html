@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Wide-Column NoSQL Executes Clustered Range Queries - nosql</title>
+    <meta name="description" content="Wide-column NoSQL databases like Apache Cassandra and ScyllaDB execute range queries efficiently by combining consistent hashing with on-disk sequential sorting. While partition keys determine which physical node stores the data, clustering keys control t">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/how-wide-column-no-sql-executes-clustered-range-queries">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Wide-Column NoSQL Executes Clustered Range Queries - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/how-wide-column-no-sql-executes-clustered-range-queries" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Wide-column NoSQL databases like Apache Cassandra and ScyllaDB execute range queries efficiently by combining consistent hashing with on-disk sequential sorting. While partition keys determine which physical node stores the data, clustering keys control t" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-wide-column-nosql-executes-clustered-range-queries">How
+Wide-Column NoSQL Executes Clustered Range Queries</h1>
+<p>Wide-column NoSQL databases like Apache Cassandra and ScyllaDB
+execute range queries efficiently by combining consistent hashing with
+on-disk sequential sorting. While partition keys determine which
+physical node stores the data, clustering keys control the local sort
+order of rows within that specific partition. When a range query targets
+clustered keys, the engine uses the partition key to locate the target
+storage node and then performs a fast sequential index scan over the
+ordered rows.</p>
+<h3 id="the-two-tier-key-architecture">The Two-Tier Key
+Architecture</h3>
+<p>Wide-column databases organize data using a compound primary key
+composed of two elements:</p>
+<ul>
+<li><strong>Partition Key:</strong> Hashed via algorithms like Murmur3
+to assign data across cluster nodes using a distributed hash ring.</li>
+<li><strong>Clustering Keys:</strong> Determine the internal,
+lexicographical, or numerical sorting order of records stored within
+that specific partition.</li>
+</ul>
+<p>Because hashing randomizes data placement across the cluster, range
+queries across different partition keys are expensive and typically
+require full-cluster scans. However, range queries on clustering keys
+operate <em>within</em> an established partition, turning an expensive
+distributed scan into an efficient local search.</p>
+<h3 id="on-disk-data-organization-sstables-and-memtables">On-Disk Data
+Organization (SSTables and Memtables)</h3>
+<p>To understand range execution, it is essential to look at the storage
+engine:</p>
+<ol type="1">
+<li><strong>Memtables:</strong> In-memory write buffers (often skiplists
+or sorted trees) that keep rows sorted by their clustering keys before
+being flushed.</li>
+<li><strong>SSTables (Sorted String Tables):</strong> Immutable disk
+files where rows within each partition are laid out sequentially
+according to the clustering key order.</li>
+<li><strong>Partition Indexes and Column Indexes:</strong> Metadata
+within the SSTable that maps clustering key offsets to specific byte
+locations on disk.</li>
+</ol>
+<h3 id="step-by-step-range-query-execution">Step-by-Step Range Query
+Execution</h3>
+<p>When a client issues a query such as
+<code>SELECT * FROM events WHERE user_id = '123' AND timestamp &gt;= '2023-01-01' AND timestamp &lt;= '2023-01-31'</code>:</p>
+<ol type="1">
+<li><strong>Routing:</strong> The client or coordinator node hashes the
+partition key (<code>user_id = '123'</code>) to identify the replica
+nodes owning that token range and routes the read request directly to
+them.</li>
+<li><strong>Locating the Partition:</strong> On the replica node, the
+storage engine uses Bloom filters and the partition summary/index to
+confirm the partition exists and locate its starting byte offset inside
+the relevant SSTables and Memtables.</li>
+<li><strong>Seeking the Start Bound:</strong> Inside the partition, the
+engine consults the column index or row offset table. It performs a
+binary search to find the entry point matching the lower bound of the
+range query (<code>timestamp &gt;= '2023-01-01'</code>).</li>
+<li><strong>Sequential Scanning:</strong> Once the start position is
+located, the engine reads data sequentially along the disk block until
+it reaches the upper bound (<code>timestamp &lt;= '2023-01-31'</code>).
+Because the clustering keys are physically stored in order, no random
+seeks are required during this scan phase.</li>
+<li><strong>Merging and Reconciliation:</strong> Data for a single
+partition may reside across active Memtables and multiple SSTables. The
+node reads streams from each source simultaneously, using a priority
+queue (k-way merge) to evaluate row timestamps, discard overwritten
+values, apply tombstones (deletions), and return a sorted stream to the
+coordinator.</li>
+</ol>
+<h3 id="performance-characteristics">Performance Characteristics</h3>
+<p>Executing range queries on clustering keys achieves <span
+class="math inline">\(O(\log N)\)</span> search complexity to find the
+initial slice boundary, followed by <span
+class="math inline">\(O(K)\)</span> sequential access to retrieve the
+matching range, where <span class="math inline">\(K\)</span> is the
+number of records returned. Because disk subsystems excel at sequential
+I/O, this clustered execution pattern delivers high throughput and low
+latency compared to traditional distributed queries.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/how-wide-column-no-sql-executes-clustered-range-queries';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

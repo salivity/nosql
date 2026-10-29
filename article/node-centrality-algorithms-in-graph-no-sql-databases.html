@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Node Centrality Algorithms in Graph NoSQL Databases - nosql</title>
+    <meta name="description" content="Evaluating node centrality in massive social networks involves identifying the most critical, influential, or connective actors within datasets spanning billions of vertices and edges. Graph NoSQL databases tackle this computational challenge by pairing o">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/node-centrality-algorithms-in-graph-no-sql-databases">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Node Centrality Algorithms in Graph NoSQL Databases - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/node-centrality-algorithms-in-graph-no-sql-databases" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Evaluating node centrality in massive social networks involves identifying the most critical, influential, or connective actors within datasets spanning billions of vertices and edges. Graph NoSQL databases tackle this computational challenge by pairing o" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="node-centrality-algorithms-in-graph-nosql-databases">Node
+Centrality Algorithms in Graph NoSQL Databases</h1>
+<p>Evaluating node centrality in massive social networks involves
+identifying the most critical, influential, or connective actors within
+datasets spanning billions of vertices and edges. Graph NoSQL databases
+tackle this computational challenge by pairing optimized storage
+structures—such as index-free adjacency—with distributed, parallelized
+graph algorithms. This article breaks down the primary centrality
+metrics used in social network analysis, the distributed compute
+frameworks (like Pregel and Bulk Synchronous Parallel) that allow them
+to scale, and the heuristic techniques employed to make high-complexity
+calculations computationally feasible across massive clusters.</p>
+<h3 id="core-centrality-metrics-in-social-graphs">Core Centrality
+Metrics in Social Graphs</h3>
+<p>Centrality measures define "importance" based on structural topology.
+Graph NoSQL systems generally compute four primary types:</p>
+<ul>
+<li><strong>Degree Centrality:</strong> Measures the immediate number of
+connections a node possesses. In directed social networks, this splits
+into in-degree (popularity/followers) and out-degree
+(activity/following). This is the most computationally lightweight
+metric, requiring only a localized count of adjacent edges.</li>
+<li><strong>Closeness Centrality:</strong> Computes the reciprocal of
+the sum of the shortest paths from a given node to all other reachable
+nodes. It reflects how rapidly information can disseminate from a node
+to the rest of the network.</li>
+<li><strong>Betweenness Centrality:</strong> Quantifies how often a node
+falls along the shortest path between all pairs of other nodes. In
+social networks, nodes with high betweenness act as key information
+brokers or gatekeepers between disparate communities.</li>
+<li><strong>Eigenvector Centrality and PageRank:</strong> Assigns
+relative influence based on the premise that connections to high-scoring
+nodes contribute more to a score than connections to low-scoring nodes.
+PageRank adjusts this by accounting for the total out-degree of pointing
+nodes, dampening authority to prevent circular feedback loops.</li>
+</ul>
+<h3 id="distributed-processing-frameworks-the-pregel-model">Distributed
+Processing Frameworks: The Pregel Model</h3>
+<p>Massive social networks cannot fit into the memory of a single
+server. Consequently, graph NoSQL engines rely on distributed computing
+models, predominantly inspired by Google's Pregel and the Bulk
+Synchronous Parallel (BSP) paradigm.</p>
+<p>In the BSP "think like a vertex" model, execution proceeds in
+synchronized iterations called supersteps:</p>
+<ol type="1">
+<li><strong>Vertex Execution:</strong> Each node executes a user-defined
+function in parallel based on its current state and messages received
+from the previous superstep.</li>
+<li><strong>Message Passing:</strong> Nodes generate messages along
+their outgoing edges directed toward neighbor vertices.</li>
+<li><strong>Synchronization Barrier:</strong> The computation pauses
+until all messages are delivered across the network cluster before the
+next superstep begins.</li>
+</ol>
+<p>For algorithms like PageRank, this model scales linearly with the
+number of edges. Each vertex divides its current rank by its out-degree
+and sends that fractional value along its outgoing edges. In the next
+superstep, destination vertices aggregate the incoming values,
+recalculate their rank with a damping factor, and repeat until the
+global error converges below a predefined threshold.</p>
+<h3 id="tackling-computational-bottlenecks-via-approximation">Tackling
+Computational Bottlenecks via Approximation</h3>
+<p>While Degree Centrality and PageRank scale well in distributed
+environments, exact Betweenness and Closeness centralities are
+prohibitively expensive on massive networks. The standard method for
+betweenness, Brandes' Algorithm, operates in <span
+class="math inline">\(O(V \cdot E)\)</span> time. Across networks with
+hundreds of millions of nodes (<span class="math inline">\(V\)</span>)
+and billions of edges (<span class="math inline">\(E\)</span>),
+calculating exact shortest paths from every vertex is computationally
+intractable.</p>
+<p>Graph NoSQL platforms bypass this bottleneck using approximation
+algorithms:</p>
+<ul>
+<li><strong><span class="math inline">\(k\)</span>-Path Centrality and
+Random Walk Sampling:</strong> Instead of computing shortest paths
+between all pairs, engines calculate paths originating from a
+randomized, statistically representative subset of nodes (<span
+class="math inline">\(k\)</span>). This yields an accurate approximation
+of relative betweenness at a fraction of the compute time.</li>
+<li><strong>HyperBall Algorithm:</strong> To calculate closeness
+centrality across billions of nodes without running full breadth-first
+searches (BFS), engines use HyperBall. This algorithm leverages
+HyperLogLog counter structures to approximate neighborhood sizes at
+increasing hop distances, drastically reducing memory overhead.</li>
+</ul>
+<h3 id="data-partitioning-and-index-free-adjacency">Data Partitioning
+and Index-Free Adjacency</h3>
+<p>The physical storage and partitioning strategy of a graph database
+fundamentally impacts algorithm performance:</p>
+<ul>
+<li><strong>Index-Free Adjacency:</strong> Native graph stores ensure
+that each node maintains direct physical memory pointers to its
+neighbors. Traversing an edge avoids global index lookups, executing in
+<span class="math inline">\(O(1)\)</span> time per hop, which
+accelerates iterative graph traversals.</li>
+<li><strong>Vertex-Cut vs. Edge-Cut Partitioning:</strong> Traditional
+edge-cut partitioning minimizes the number of cut edges between servers.
+However, social graphs exhibit "power-law" distributions where a small
+fraction of celebrity nodes possess millions of edges. These hub nodes
+create extreme memory and network bottlenecks on single machines. Modern
+graph NoSQL engines resolve this via vertex-cut partitioning, splitting
+hub vertices across multiple machines and synchronizing their state
+across cluster boundaries during each superstep.</li>
+</ul>
+<p>Through a combination of distributed vertex-centric execution, graph
+partitioning optimized for power-law distributions, and approximation
+algorithms, graph NoSQL systems successfully compute node centrality
+across global social graphs in near-real-time.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/node-centrality-algorithms-in-graph-no-sql-databases';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

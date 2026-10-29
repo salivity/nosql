@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Consensus in Distributed NoSQL Systems: Paxos and Raft - nosql</title>
+    <meta name="description" content="Distributed NoSQL systems rely on consensus algorithms like Paxos and Raft to maintain a consistent, synchronized state across multiple independent nodes despite hardware failures and network partitions. This article examines how these databases implement">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/consensus-in-distributed-no-sql-systems-paxos-and-raft">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Consensus in Distributed NoSQL Systems: Paxos and Raft - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/consensus-in-distributed-no-sql-systems-paxos-and-raft" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Distributed NoSQL systems rely on consensus algorithms like Paxos and Raft to maintain a consistent, synchronized state across multiple independent nodes despite hardware failures and network partitions. This article examines how these databases implement" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="consensus-in-distributed-nosql-systems-paxos-and-raft">Consensus
+in Distributed NoSQL Systems: Paxos and Raft</h1>
+<p>Distributed NoSQL systems rely on consensus algorithms like Paxos and
+Raft to maintain a consistent, synchronized state across multiple
+independent nodes despite hardware failures and network partitions. This
+article examines how these databases implement State Machine
+Replication, handle leader election and quorum-based log replication,
+resolve conflicting write operations, and navigate the practical
+trade-offs between consistency and operational latency.</p>
+<h3 id="the-problem-of-distributed-consensus">The Problem of Distributed
+Consensus</h3>
+<p>In a distributed NoSQL database, data is partitioned and replicated
+across multiple physical machines to ensure high availability and
+horizontal scalability. When a client issues a write request, all
+replicas must agree on the order and value of that write.</p>
+<p>Without a coordination mechanism, concurrent writes and network
+partitions can cause replicas to diverge, resulting in split-brain
+scenarios where different nodes claim authority over the same data.
+Consensus algorithms solve this by ensuring that a cluster of nodes can
+agree on a sequence of operations as long as a majority (a quorum) of
+nodes remains operational.</p>
+<h3 id="state-machine-replication">State Machine Replication</h3>
+<p>Both Paxos and Raft implement consensus through State Machine
+Replication (SMR). Under SMR:</p>
+<ol type="1">
+<li>Every replica acts as an identical deterministic state machine.</li>
+<li>An append-only log records all incoming state transitions
+(writes).</li>
+<li>If all replicas process the same inputs in the exact same sequence,
+they will inevitably arrive at the same internal state.</li>
+</ol>
+<p>The role of the consensus algorithm is not to manage the database
+storage engine directly, but to guarantee that the replicated logs on
+all participating nodes remain identical in content and order.</p>
+<h3 id="paxos-in-nosql-systems">Paxos in NoSQL Systems</h3>
+<p>Classic Paxos achieves consensus on a single value through a
+two-phase protocol:</p>
+<ol type="1">
+<li><strong>Prepare/Promise Phase:</strong> A proposer node selects a
+unique proposal number <span class="math inline">\(n\)</span> and sends
+a <code>Prepare(n)</code> message to a majority of acceptors. If an
+acceptor receives a proposal number higher than any it has previously
+observed, it responds with a <code>Promise</code> not to accept
+proposals numbered lower than <span class="math inline">\(n\)</span>,
+returning any previously accepted value.</li>
+<li><strong>Propose/Accept Phase:</strong> Once the proposer receives
+promises from a quorum, it sends an <code>Accept(n, value)</code>
+message. The value is either the one returned by the acceptors in phase
+one (if any) or a new value. If the acceptors have not promised to
+ignore proposal <span class="math inline">\(n\)</span>, they accept
+it.</li>
+</ol>
+<p>Because basic Paxos requires two round-trips per write, production
+NoSQL engines use <strong>Multi-Paxos</strong>. Multi-Paxos elects a
+stable leader to bypass the prepare phase for subsequent writes,
+reducing latency to a single round-trip under normal conditions.</p>
+<p>For instance, Apache Cassandra utilizes a variant of Paxos for its
+Lightweight Transactions (LWT), allowing linearizable compare-and-set
+operations across distributed nodes.</p>
+<h3 id="raft-in-nosql-systems">Raft in NoSQL Systems</h3>
+<p>Raft was designed to provide the same guarantees as Multi-Paxos while
+being more understandable by decomposing consensus into three explicit
+sub-problems: leader election, log replication, and safety.</p>
+<h4 id="1-leader-election">1. Leader Election</h4>
+<p>A Raft cluster operates with one elected leader and multiple
+followers. If followers stop receiving periodic heartbeats from the
+leader due to network delays or crashes, an election timeout triggers. A
+follower transitions to a candidate state, increments its term counter,
+votes for itself, and requests votes from peers. A candidate becomes the
+leader if it secures votes from a strict majority (<span
+class="math inline">\(N/2 + 1\)</span>) of the nodes.</p>
+<h4 id="2-log-replication">2. Log Replication</h4>
+<p>Once elected, the leader handles all client writes:</p>
+<ul>
+<li>The leader appends the write as a new entry in its local log.</li>
+<li>It distributes the entry to follower nodes via
+<code>AppendEntries</code> remote procedure calls (RPCs).</li>
+<li>Once a majority of followers acknowledge writing the entry to their
+local disks, the leader commits the entry and applies it to its local
+state machine.</li>
+<li>The leader notifies followers of the commit in subsequent RPCs, and
+the followers apply the entry locally.</li>
+</ul>
+<h4 id="3-safety-invariants">3. Safety Invariants</h4>
+<p>Raft enforces log matching properties to ensure consistency:</p>
+<ul>
+<li>If two entries in different logs have the same index and term, they
+store the identical command.</li>
+<li>If two entries in different logs have the same index and term, their
+logs are identical up to that point.</li>
+<li>Candidates cannot be elected unless their log is at least as
+up-to-date as the majority of the cluster, preventing committed entries
+from being overwritten.</li>
+</ul>
+<p>Modern distributed datastores such as CockroachDB, TiDB, and etcd
+rely on Raft (or Raft-based multi-group designs) to coordinate
+transaction state and metadata catalogs.</p>
+<h3 id="quorums-and-failure-recovery">Quorums and Failure Recovery</h3>
+<p>Both algorithms rely on overlapping majorities. If a cluster contains
+<span class="math inline">\(2f + 1\)</span> nodes, it can tolerate <span
+class="math inline">\(f\)</span> simultaneous failures. Because any two
+majorities share at least one node, the most up-to-date node is always
+present in any quorum formed to elect a leader or commit an entry.</p>
+<p>During node recovery, catching up is achieved by synchronizing
+missing log indices from the current leader. If an offline node lags
+significantly behind, transferring individual log entries becomes
+inefficient. In such cases, the leader generates and streams a snapshot
+of the state machine, allowing the follower to fast-forward its state
+before rejoining real-time consensus.</p>
+<h3 id="latency-and-architectural-trade-offs">Latency and Architectural
+Trade-offs</h3>
+<p>Achieving strict consensus introduces unavoidable overhead:</p>
+<ul>
+<li><strong>Write Amplification and Latency:</strong> Writes require
+network round-trips to reach a majority of nodes, along with synchronous
+disk writes (fsync) to persist log entries before acknowledgment.</li>
+<li><strong>Geographic Constraints:</strong> Multi-region deployments
+face latency penalties dictated by the speed of light between regions
+during the consensus phase.</li>
+<li><strong>Availability Impacts:</strong> If a network partition
+isolates more than half of the nodes, the minority partition cannot form
+a quorum and must reject writes to protect consistency, directly
+conforming to the CP constraints of the CAP theorem.</li>
+</ul></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/consensus-in-distributed-no-sql-systems-paxos-and-raft';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

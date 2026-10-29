@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Why Sharding is a Native Feature in NoSQL - nosql</title>
+    <meta name="description" content="This article explores why sharding—the horizontal partitioning of data across multiple physical servers—is built directly into the core architecture of most distributed NoSQL databases rather than added as a secondary layer. Unlike traditional relational">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/why-sharding-is-a-native-feature-in-no-sql">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Why Sharding is a Native Feature in NoSQL - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/why-sharding-is-a-native-feature-in-no-sql" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explores why sharding—the horizontal partitioning of data across multiple physical servers—is built directly into the core architecture of most distributed NoSQL databases rather than added as a secondary layer. Unlike traditional relational" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="why-sharding-is-a-native-feature-in-nosql">Why Sharding is a
+Native Feature in NoSQL</h1>
+<p>This article explores why sharding—the horizontal partitioning of
+data across multiple physical servers—is built directly into the core
+architecture of most distributed NoSQL databases rather than added as a
+secondary layer. Unlike traditional relational databases that scale
+vertically by adding more compute and storage to a single machine, NoSQL
+systems were fundamentally designed to operate over clusters of
+commodity hardware. By examining core architectural principles,
+including scale-out design philosophies, simplified data models,
+automated cluster coordination, and integrated fault tolerance, this
+guide explains how native sharding delivers seamless scalability and
+performance.</p>
+<h3 id="architectural-philosophy-scale-out-by-default">Architectural
+Philosophy: Scale-Out by Default</h3>
+<p>Traditional relational database management systems (RDBMS) were
+conceived in an era of centralized mainframe hardware, prioritizing
+transactional integrity (ACID properties) across complex relational
+schemas on a single node. When data outgrows a single machine,
+partitioning an RDBMS typically requires complex application-level logic
+or third-party middleware.</p>
+<p>NoSQL engines were specifically engineered to solve the problem of
+unbounded data growth by scaling out horizontally rather than scaling up
+vertically. Because the core requirement was handling massive throughput
+across clusters of machines, horizontal partitioning—or sharding—had to
+be built directly into the database engine from day one to ensure data
+could be distributed across nodes without re-architecting the
+application.</p>
+<h3 id="data-models-tailored-for-distribution">Data Models Tailored for
+Distribution</h3>
+<p>A major barrier to sharding in relational systems is the cost of
+cross-node operations, such as multi-table <code>JOIN</code> statements
+and distributed multi-phase transactions. These operations introduce
+severe network latency and coordination overhead when tables are split
+across different servers.</p>
+<p>NoSQL databases bypass this limitation through denormalized data
+models, such as key-value, document, wide-column, and graph
+structures:</p>
+<ul>
+<li><strong>Partition Keys:</strong> In NoSQL models, every record is
+associated with a primary key or partition key.</li>
+<li><strong>Self-Contained Records:</strong> Documents and rows
+typically aggregate related data together, minimizing or eliminating the
+need for relational joins across nodes.</li>
+<li><strong>Deterministic Routing:</strong> By using hashing algorithms
+(such as consistent hashing) or range-based indexing on the partition
+key, the database engine can immediately identify which physical node
+holds a specific piece of data without querying the rest of the
+cluster.</li>
+</ul>
+<h3 id="automated-shard-management-and-rebalancing">Automated Shard
+Management and Rebalancing</h3>
+<p>In engines with native sharding, partitioning is not a manual
+administrative task; it is handled autonomously by the database
+runtime:</p>
+<ul>
+<li><strong>Dynamic Chunk Splitting:</strong> As data volume grows
+within a specific partition, the engine detects capacity thresholds and
+automatically splits shards into smaller ranges or chunks.</li>
+<li><strong>Elastic Node Addition:</strong> When administrators add new
+servers to the cluster, the database automatically migrates a subset of
+shards to the new hardware without requiring service downtime.</li>
+<li><strong>Query Routing:</strong> Native query routers (such as
+MongoDB's <code>mongos</code> or Cassandra's peer-to-peer gossip
+protocol) direct read and write requests directly to the appropriate
+target shards, hiding cluster topology and shard locations from the
+client application entirely.</li>
+</ul>
+<h3 id="integrated-high-availability-and-replication">Integrated High
+Availability and Replication</h3>
+<p>Native sharding in distributed NoSQL engines is deeply integrated
+with native replication protocols. Rather than replicating the entire
+database image as a monolith, NoSQL engines replicate individual shards
+across different physical failure domains.</p>
+<p>In this setup, each shard typically exists as a replica set with a
+primary (or leader) and multiple secondary (or follower) nodes. If a
+server hosting a specific shard fails, the cluster's native consensus
+mechanism (such as Raft or Paxos) elects a new leader for that partition
+without impacting the availability of unaffected shards. This design
+guarantees both high availability and fault isolation at the partition
+level.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/why-sharding-is-a-native-feature-in-no-sql';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

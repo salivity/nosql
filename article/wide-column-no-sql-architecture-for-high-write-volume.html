@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wide-Column NoSQL Architecture for High Write Volume - nosql</title>
+    <meta name="description" content="Wide-column NoSQL databases, such as Apache Cassandra and ScyllaDB, achieve industry-leading write throughput by fundamentally redesigning how data is ingested, buffered, and committed to storage. By replacing traditional in-place disk updates with an app">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/wide-column-no-sql-architecture-for-high-write-volume">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Wide-Column NoSQL Architecture for High Write Volume - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/wide-column-no-sql-architecture-for-high-write-volume" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Wide-column NoSQL databases, such as Apache Cassandra and ScyllaDB, achieve industry-leading write throughput by fundamentally redesigning how data is ingested, buffered, and committed to storage. By replacing traditional in-place disk updates with an app" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="wide-column-nosql-architecture-for-high-write-volume">Wide-Column
+NoSQL Architecture for High Write Volume</h1>
+<p>Wide-column NoSQL databases, such as Apache Cassandra and ScyllaDB,
+achieve industry-leading write throughput by fundamentally redesigning
+how data is ingested, buffered, and committed to storage. By replacing
+traditional in-place disk updates with an append-only, Log-Structured
+Merge-tree (LSM-tree) architecture and pairing it with a shared-nothing
+distributed topology, these systems convert slow, random write
+operations into hyper-fast, sequential input/output (I/O) processes
+while eliminating coordination bottlenecks.</p>
+<h3 id="sequential-logging-via-write-ahead-logs">Sequential Logging via
+Write-Ahead Logs</h3>
+<p>When a write operation enters a wide-column database node, the system
+immediately records it to an append-only commit log on disk, often
+called a Write-Ahead Log (WAL). Because the commit log is strictly
+append-only, the storage controller writes the data sequentially rather
+than seeking random sectors across the disk. This mechanical efficiency
+minimizes disk head movement on traditional hard drives and drastically
+reduces write amplification on modern solid-state drives (SSDs),
+enabling rapid crash-recovery durability with minimal latency.</p>
+<h3 id="in-memory-buffering-with-memtables">In-Memory Buffering with
+Memtables</h3>
+<p>Simultaneously with the commit log write, the data is placed into an
+in-memory structure called a Memtable. The Memtable stores and sorts
+incoming write records by row key and column name directly in RAM. Once
+the data resides securely in the sequential commit log and the volatile
+Memtable, the database immediately confirms a successful write to the
+client. This design decouples client write operations entirely from the
+latencies of persistent table storage.</p>
+<h3 id="immutable-sstables-on-disk">Immutable SSTables on Disk</h3>
+<p>As Memtables fill to a configurable memory threshold, the database
+flushes their contents to disk as Sorted String Tables (SSTables).
+Crucially, SSTables are completely immutable; once written, they are
+never modified or rewritten in place. Adding new data, updating an
+existing column, or deleting a value (which writes an indicator called a
+"tombstone") is always handled by creating a new SSTable or writing to a
+new Memtable. Because disk writes occur in large, contiguous blocks, the
+engine avoids random write I/O entirely during standard ingestion.</p>
+<h3 id="asynchronous-background-compaction">Asynchronous Background
+Compaction</h3>
+<p>To manage the accumulation of immutable SSTables over time,
+wide-column engines run an asynchronous background process called
+compaction. Compaction merges multiple sorted SSTables into consolidated
+new ones, resolving duplicates, discarding overwritten values, and
+permanently purging data marked by tombstones. Because this
+reconciliation happens independently in the background, it shields the
+critical write path from the performance penalties of garbage collection
+and deduplication.</p>
+<h3 id="peer-to-peer-partitioning-and-decentralization">Peer-to-Peer
+Partitioning and Decentralization</h3>
+<p>At the network level, many wide-column databases employ a masterless,
+peer-to-peer ring architecture based on consistent hashing. Data keys
+are hashed to determine which nodes in the cluster will store the
+replica. Because every node is functionally equal, any node can act as a
+coordinator for an incoming write request. There is no central master
+node to bottleneck the cluster, allowing write throughput to scale
+linearly simply by adding more hardware to the network.</p>
+<h3 id="elimination-of-multi-row-acid-locks">Elimination of Multi-Row
+ACID Locks</h3>
+<p>Traditional relational databases spend significant CPU cycles and I/O
+maintaining immediate consistency across tables, enforcing foreign keys,
+and acquiring distributed row- or table-level locks. Wide-column
+databases discard these constraints in favor of tunable consistency and
+row-level atomicity. By eliminating global locks, transactions, and
+relational constraints, wide-column systems execute writes concurrently
+across thousands of threads without waiting for cross-table
+synchronization.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/wide-column-no-sql-architecture-for-high-write-volume';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

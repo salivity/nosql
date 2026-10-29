@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Active-Active Document NoSQL Conflict Resolution - nosql</title>
+    <meta name="description" content="In multi-region active-active deployments, document NoSQL databases allow simultaneous read and write operations across geographically distributed data centers. Because network latency makes synchronous global locking impractical, these platforms rely on">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/active-active-document-no-sql-conflict-resolution">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Active-Active Document NoSQL Conflict Resolution - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/active-active-document-no-sql-conflict-resolution" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In multi-region active-active deployments, document NoSQL databases allow simultaneous read and write operations across geographically distributed data centers. Because network latency makes synchronous global locking impractical, these platforms rely on" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="active-active-document-nosql-conflict-resolution">Active-Active
+Document NoSQL Conflict Resolution</h1>
+<p>In multi-region active-active deployments, document NoSQL databases
+allow simultaneous read and write operations across geographically
+distributed data centers. Because network latency makes synchronous
+global locking impractical, these platforms rely on asynchronous
+replication, which introduces the risk of write conflicts when the same
+document is updated concurrently in different regions. To preserve data
+consistency and availability, platforms employ strategies ranging from
+timestamp-based heuristics and deterministic revision trees to
+state-based conflict-free replicated data types (CRDTs) and custom merge
+logic.</p>
+<h2 id="the-nature-of-active-active-conflicts">The Nature of
+Active-Active Conflicts</h2>
+<p>A conflict occurs when two or more nodes accept conflicting write or
+delete operations on the same document before replication completes.
+Because document databases store data in flexible, semi-structured
+formats (such as JSON or BSON), conflicts can occur either at the entire
+document level or at the individual field level. Handling these
+collisions requires trade-offs between system throughput, latency, and
+data integrity.</p>
+<h2 id="primary-conflict-resolution-strategies">Primary Conflict
+Resolution Strategies</h2>
+<h3 id="1-last-write-wins-lww">1. Last-Write-Wins (LWW)</h3>
+<p>Last-Write-Wins is the most common default strategy in databases like
+Amazon DynamoDB Global Tables and Azure Cosmos DB. Under LWW:</p>
+<ul>
+<li>Every write is stamped with a timestamp, typically generated by the
+system clock or a Hybrid Logical Clock (HLC).</li>
+<li>When conflicting updates arrive, the platform compares timestamps
+and commits the write with the highest value, silently discarding older
+updates.</li>
+<li><strong>Limitations:</strong> Physical clock skew across regions can
+cause operations to be dropped out of actual chronological sequence,
+leading to unintended data loss.</li>
+</ul>
+<h3 id="2-multi-version-concurrency-control-mvcc-and-revision-trees">2.
+Multi-Version Concurrency Control (MVCC) and Revision Trees</h3>
+<p>Pioneered by platforms like Apache CouchDB and Couchbase, this
+approach treats conflicts as branching histories rather than immediate
+errors:</p>
+<ul>
+<li>Every update appends a new revision identifier (e.g.,
+<code>_rev</code>) to the document, generating a directed acyclic graph
+(DAG) of changes.</li>
+<li>When concurrent updates occur, the database retains both branches,
+marking the document as in a conflicted state.</li>
+<li>The system automatically designates a deterministic "winner" (often
+based on the highest revision number or hash value) so reads remain
+consistent.</li>
+<li>The actual conflict remains stored until the application or an
+automated worker reads the divergent tree, merges the data, and writes a
+resolving revision.</li>
+</ul>
+<h3 id="3-conflict-free-replicated-data-types-crdts">3. Conflict-Free
+Replicated Data Types (CRDTs)</h3>
+<p>Modern distributed document stores increasingly adopt state-based or
+operation-based CRDTs to achieve mathematically guaranteed eventual
+consistency:</p>
+<ul>
+<li>Instead of overwriting entire JSON payloads, updates operate on
+specialized data structures such as grow-only counters,
+positive-negative (PN) counters, or observed-removed sets
+(OR-Sets).</li>
+<li>When concurrent updates reach a node, they are merged
+deterministically using commutative and associative operations,
+regardless of the arrival order.</li>
+<li>This approach enables field-level conflict resolution, ensuring that
+two concurrent writes modifying distinct fields in the same document
+merge cleanly without dropping data.</li>
+</ul>
+<h3 id="4-custom-application-defined-resolution">4. Custom
+Application-Defined Resolution</h3>
+<p>Many enterprise platforms allow developers to offload resolution to
+custom application code:</p>
+<ul>
+<li><strong>Trigger-Based Merging:</strong> Platforms like Azure Cosmos
+DB allow developers to attach stored procedures or server-side scripts
+that execute automatically upon detecting a conflict.</li>
+<li><strong>Conflict Queues:</strong> Other architectures place
+conflicted mutations into dedicated dead-letter collections or feeds
+(such as change streams). The application consumes these streams
+asynchronously to apply domain-specific business rules, such as
+prioritizing the user with higher access privileges or calculating an
+account balance delta.</li>
+</ul>
+<h2 id="architectural-trade-offs">Architectural Trade-Offs</h2>
+<p>Choosing a conflict resolution pattern requires balancing latency
+against consistency:</p>
+<ul>
+<li><strong>LWW</strong> provides maximum write throughput and zero
+manual intervention, but sacrifices precision.</li>
+<li><strong>CRDTs</strong> offer automated correctness but introduce
+computational overhead and schema restrictions.</li>
+<li><strong>Application-driven merges</strong> safeguard data integrity
+under complex business logic, but increase architecture complexity and
+require mechanisms to handle conflicted states until resolution is
+complete.</li>
+</ul></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/active-active-document-no-sql-conflict-resolution';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

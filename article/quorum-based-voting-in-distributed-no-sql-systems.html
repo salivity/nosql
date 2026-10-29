@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quorum-Based Voting in Distributed NoSQL Systems - nosql</title>
+    <meta name="description" content="Distributed NoSQL databases rely on quorum-based voting to balance data consistency, availability, and partition tolerance across replicated nodes. This article explains how replication factors, write quorums, and read quorums mathematically interact to d">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/quorum-based-voting-in-distributed-no-sql-systems">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Quorum-Based Voting in Distributed NoSQL Systems - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/quorum-based-voting-in-distributed-no-sql-systems" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Distributed NoSQL databases rely on quorum-based voting to balance data consistency, availability, and partition tolerance across replicated nodes. This article explains how replication factors, write quorums, and read quorums mathematically interact to d" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="quorum-based-voting-in-distributed-nosql-systems">Quorum-Based
+Voting in Distributed NoSQL Systems</h1>
+<p>Distributed NoSQL databases rely on quorum-based voting to balance
+data consistency, availability, and partition tolerance across
+replicated nodes. This article explains how replication factors, write
+quorums, and read quorums mathematically interact to determine operation
+success, prevent stale data reads, and maintain system reliability
+during hardware failures or network partitions.</p>
+<h3 id="the-foundation-the-n-w-and-r-model">The Foundation: The <span
+class="math inline">\(N\)</span>, <span
+class="math inline">\(W\)</span>, and <span
+class="math inline">\(R\)</span> Model</h3>
+<p>Quorum mechanisms in distributed systems like Apache Cassandra,
+Amazon DynamoDB, and Riak are governed by three primary variables:</p>
+<ul>
+<li><strong><span class="math inline">\(N\)</span> (Replication
+Factor):</strong> The total number of nodes in the cluster designated to
+store a copy of a specific partition or key.</li>
+<li><strong><span class="math inline">\(W\)</span> (Write
+Quorum):</strong> The minimum number of replica nodes that must
+acknowledge a write operation for it to be considered successful.</li>
+<li><strong><span class="math inline">\(R\)</span> (Read
+Quorum):</strong> The minimum number of replica nodes that must respond
+to a read query for it to be considered successful.</li>
+</ul>
+<h3 id="determining-write-success">Determining Write Success</h3>
+<p>When a client initiates a write operation, a coordinator node
+receives the request and forwards the payload to all <span
+class="math inline">\(N\)</span> replicas responsible for that data key.
+The coordinator then awaits acknowledgments from those replicas.</p>
+<p>A write succeeds only if at least <span
+class="math inline">\(W\)</span> nodes successfully persist the data
+(either to memory/commit log or disk) and acknowledge the operation
+before a predefined timeout expires. If fewer than <span
+class="math inline">\(W\)</span> nodes respond—due to network latency,
+node crashes, or network partitions—the coordinator returns a failure or
+timeout to the client. Depending on the database configuration, the
+partially written data may either be discarded, marked for rollback, or
+later reconciled via anti-entropy processes.</p>
+<h3 id="determining-read-success">Determining Read Success</h3>
+<p>When a client queries the database, the coordinator requests the data
+from <span class="math inline">\(R\)</span> replicas. Because background
+processes or recent writes might have left some replicas momentarily
+lagging, these <span class="math inline">\(R\)</span> nodes may return
+divergent versions of the requested data.</p>
+<p>A read succeeds when at least <span class="math inline">\(R\)</span>
+replicas respond with data and associated metadata, such as timestamps
+or vector clocks. The coordinator compares the metadata to identify the
+most recent update, returns this newest value to the client, and
+optionally triggers a background "read repair" to update any of the
+responding replicas that held stale records. If fewer than <span
+class="math inline">\(R\)</span> nodes respond within the threshold, the
+read operation fails.</p>
+<h3 id="the-mathematical-rule-for-strong-consistency">The Mathematical
+Rule for Strong Consistency</h3>
+<p>To guarantee that a read operation always returns the latest write
+(strong consistency), distributed systems enforce the classic quorum
+condition:</p>
+<p><span class="math display">\[R + W &gt; N\]</span></p>
+<p>By the Pigeonhole Principle, this inequality guarantees that the set
+of nodes participating in the read operation will always overlap with
+the set of nodes that acknowledged the latest write by at least one
+node. Because that overlapping node possesses the latest timestamp or
+version vector, the coordinator can always identify and return the
+correct, up-to-date data.</p>
+<p>A common implementation is the <strong>Strict Majority
+Quorum</strong>, defined as:</p>
+<p><span class="math display">\[W = \lfloor N/2 \rfloor + 1 \quad
+\text{and} \quad R = \lfloor N/2 \rfloor + 1\]</span></p>
+<p>In a cluster where <span class="math inline">\(N = 3\)</span>,
+setting <span class="math inline">\(W = 2\)</span> and <span
+class="math inline">\(R = 2\)</span> results in <span
+class="math inline">\(R + W = 4 &gt; 3\)</span>. This configuration
+tolerates the failure of any single node while still guaranteeing both
+read and write success and full data consistency.</p>
+<h3 id="tunable-consistency-and-operational-trade-offs">Tunable
+Consistency and Operational Trade-Offs</h3>
+<p>Distributed NoSQL engines allow developers to adjust <span
+class="math inline">\(W\)</span> and <span
+class="math inline">\(R\)</span> per operation depending on system
+requirements:</p>
+<ul>
+<li><strong>Fast Writes, Eventual Consistency (<span
+class="math inline">\(W = 1, R = 1\)</span>):</strong> High performance
+and high availability, but <span class="math inline">\(R + W \le
+N\)</span>, meaning readers frequently encounter stale data.</li>
+<li><strong>Fast Reads, Durable Writes (<span class="math inline">\(W =
+N, R = 1\)</span>):</strong> Reads are exceptionally fast and always
+accurate, but write availability drops significantly because a single
+failed replica causes all writes to fail.</li>
+<li><strong>Balanced High Availability (<span class="math inline">\(W =
+\text{QUORUM}, R = \text{QUORUM}\)</span>):</strong> Provides strong
+consistency while allowing the cluster to absorb node failures up to
+<span class="math inline">\(\lfloor N/2 \rfloor\)</span>.</li>
+</ul></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/quorum-based-voting-in-distributed-no-sql-systems';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

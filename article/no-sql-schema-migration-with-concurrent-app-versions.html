@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NoSQL Schema Migration with Concurrent App Versions - nosql</title>
+    <meta name="description" content="Managing schema evolution in document NoSQL databases while running concurrent application versions requires decoupling schema changes from database-level structural locks. During zero-downtime deployments, such as blue-green or canary rollouts, multiple">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/no-sql-schema-migration-with-concurrent-app-versions">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="NoSQL Schema Migration with Concurrent App Versions - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/no-sql-schema-migration-with-concurrent-app-versions" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Managing schema evolution in document NoSQL databases while running concurrent application versions requires decoupling schema changes from database-level structural locks. During zero-downtime deployments, such as blue-green or canary rollouts, multiple" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="nosql-schema-migration-with-concurrent-app-versions">NoSQL
+Schema Migration with Concurrent App Versions</h1>
+<p>Managing schema evolution in document NoSQL databases while running
+concurrent application versions requires decoupling schema changes from
+database-level structural locks. During zero-downtime deployments, such
+as blue-green or canary rollouts, multiple application versions must
+simultaneously read from and write to the same document collections.
+This article explores how document stores achieve seamless transitions
+through application-level schema enforcement, document versioning
+patterns, lazy versus eager migrations, and the expand-and-contract
+methodology.</p>
+<h2 id="the-dual-version-concurrency-problem">The Dual-Version
+Concurrency Problem</h2>
+<p>When transitioning from an older application version (v1) to a newer
+version (v2), both versions share the same database instance for a
+period ranging from minutes to weeks. Relational databases traditionally
+solve migrations using table-level DDL changes, which often block writes
+or cause immediate deserialization errors for older applications.</p>
+<p>Document NoSQL engines (such as MongoDB, Couchbase, and Amazon
+DocumentDB) use dynamic typing and do not enforce a rigid, static schema
+at the storage engine layer. This allows documents with different
+structures to exist within the exact same collection. However, the
+challenge shifts to data integrity: ensuring v1 does not break when
+reading documents written by v2, and ensuring v1 does not accidentally
+overwrite or strip new fields introduced by v2.</p>
+<h2 id="schema-on-read-and-tolerance">Schema-on-Read and Tolerance</h2>
+<p>The primary mechanism for managing concurrent versions is
+schema-on-read. Rather than relying on the database engine to enforce
+structure during writes, the consuming application version interprets
+the document upon retrieval.</p>
+<p>To ensure stability across concurrent versions, applications must
+implement non-breaking serialization practices:</p>
+<ul>
+<li><strong>Tolerant Reader Pattern:</strong> Applications should only
+parse fields they explicitly need and ignore unexpected fields added by
+newer versions.</li>
+<li><strong>Default Values:</strong> New application versions must
+supply sensible in-memory default values when reading legacy documents
+where newly introduced fields are absent.</li>
+<li><strong>Preserving Unknown Fields:</strong> If v1 loads a document
+modified by v2, modifies it, and saves it back, it must retain the
+fields it does not recognize rather than dropping them during object
+mapping.</li>
+</ul>
+<h2 id="the-document-versioning-pattern">The Document Versioning
+Pattern</h2>
+<p>To eliminate ambiguity when document structures change significantly,
+engineering teams embed an explicit schema version field directly into
+the document payload:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;_id&quot;</span><span class="fu">:</span> <span class="st">&quot;user_1024&quot;</span><span class="fu">,</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;schemaVersion&quot;</span><span class="fu">:</span> <span class="dv">2</span><span class="fu">,</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;name&quot;</span><span class="fu">:</span> <span class="st">&quot;Jane Doe&quot;</span><span class="fu">,</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;contact&quot;</span><span class="fu">:</span> <span class="fu">{</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;email&quot;</span><span class="fu">:</span> <span class="st">&quot;jane@example.com&quot;</span><span class="fu">,</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;phone&quot;</span><span class="fu">:</span> <span class="st">&quot;555-0199&quot;</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">}</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
+<p>When reading a document, the application inspects
+<code>schemaVersion</code> and routes the document to an appropriate
+adapter or hydration function.</p>
+<ul>
+<li><strong>v1 Application:</strong> Only understands
+<code>schemaVersion: 1</code>. If it encounters
+<code>schemaVersion: 2</code>, it utilizes an adapter that maps nested
+structures back to its expected flat format.</li>
+<li><strong>v2 Application:</strong> Contains handling logic for both
+<code>schemaVersion: 1</code> and <code>schemaVersion: 2</code>,
+seamlessly upgrading <code>schemaVersion: 1</code> data in memory.</li>
+</ul>
+<h2 id="the-expand-and-contract-pattern">The Expand and Contract
+Pattern</h2>
+<p>For breaking schema changes—such as renaming a field, changing a data
+type, or restructuring relationships—teams utilize the expand and
+contract pattern:</p>
+<ol type="1">
+<li><strong>Expand:</strong> The database schema is expanded to support
+both old and new paradigms simultaneously. If a field <code>phone</code>
+is being changed to an array <code>phoneNumbers</code>, v2 is deployed
+with logic that writes to both <code>phone</code> and
+<code>phoneNumbers</code>, while reading from <code>phoneNumbers</code>
+with a fallback to <code>phone</code>.</li>
+<li><strong>Transition:</strong> Both v1 and v2 run concurrently. v1
+reads and writes the legacy field <code>phone</code>. Because v2 writes
+to both locations, v1 continues to operate without failure.</li>
+<li><strong>Contract:</strong> Once v1 is completely decommissioned and
+all instances are running v2, a cleanup phase occurs. The application
+stops dual-writing to the legacy field, and background tasks remove the
+legacy attributes from historical documents.</li>
+</ol>
+<h2 id="lazy-vs-eager-data-migration">Lazy vs. Eager Data Migration</h2>
+<p>Document NoSQL databases provide flexibility in when the physical
+transformation of data takes place.</p>
+<h3 id="lazy-migration-incremental">Lazy Migration (Incremental)</h3>
+<p>In lazy migration, documents are transformed on-the-fly. When v2
+reads a document with an outdated schema, it mutates the object
+structure in memory to match the latest schema. When that document is
+subsequently updated and saved, it is written back to the database in
+the new format.</p>
+<ul>
+<li><strong>Advantage:</strong> Spreads computing and I/O costs over
+time without creating sudden write spikes.</li>
+<li><strong>Limitation:</strong> Infrequently accessed documents may
+remain in the legacy format indefinitely, requiring the application to
+maintain legacy deserialization code long after v1 is retired.</li>
+</ul>
+<h3 id="eager-migration-background-batching">Eager Migration (Background
+Batching)</h3>
+<p>Eager migration uses asynchronous background workers to iterate
+through collections and update documents to the latest format using
+batched operations.</p>
+<ul>
+<li><strong>Advantage:</strong> Guarantees that every document conforms
+to the latest schema within a bounded timeframe, allowing legacy code
+paths to be safely deleted.</li>
+<li><strong>Limitation:</strong> Requires careful rate-limiting to
+prevent saturation of IOPS, CPU, and replication bandwidth while
+production workloads are active.</li>
+</ul>
+<h2 id="engine-level-validation-management">Engine-Level Validation
+Management</h2>
+<p>While document databases are schemaless at their core, engines like
+MongoDB and Couchbase support optional server-side validation (such as
+JSON Schema validation).</p>
+<p>When running concurrent versions, strict server-side validation rules
+can reject writes from older application instances. To mitigate
+this:</p>
+<ul>
+<li><strong>Validation Levels:</strong> MongoDB provides
+<code>validationLevel</code> settings (such as <code>moderate</code> or
+<code>warn</code>). Setting the level to <code>moderate</code> ensures
+that existing invalid documents are not blocked when updated, while new
+inserts can be held to baseline rules.</li>
+<li><strong>Permissive Schemas:</strong> JSON Schema rules deployed to
+the engine during migrations must treat newly introduced fields as
+optional, and must avoid restricting unknown properties (e.g., setting
+<code>additionalProperties: true</code>) until all older application
+instances are retired.</li>
+</ul></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/no-sql-schema-migration-with-concurrent-app-versions';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

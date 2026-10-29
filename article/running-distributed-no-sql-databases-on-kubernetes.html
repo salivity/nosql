@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Running Distributed NoSQL Databases on Kubernetes - nosql</title>
+    <meta name="description" content="Running distributed NoSQL databases within Kubernetes containers enables declarative infrastructure, dynamic scaling, and streamlined operations, but it also introduces critical challenges regarding state management, hardware performance, and network reli">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/running-distributed-no-sql-databases-on-kubernetes">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Running Distributed NoSQL Databases on Kubernetes - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/running-distributed-no-sql-databases-on-kubernetes" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Running distributed NoSQL databases within Kubernetes containers enables declarative infrastructure, dynamic scaling, and streamlined operations, but it also introduces critical challenges regarding state management, hardware performance, and network reli" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="running-distributed-nosql-databases-on-kubernetes">Running
+Distributed NoSQL Databases on Kubernetes</h1>
+<p>Running distributed NoSQL databases within Kubernetes containers
+enables declarative infrastructure, dynamic scaling, and streamlined
+operations, but it also introduces critical challenges regarding state
+management, hardware performance, and network reliability. Because
+distributed databases inherently manage their own clustering, consensus,
+and data distribution logic, deploying them within an abstraction layer
+like Kubernetes requires careful alignment between container
+orchestration and database architecture. The following core
+considerations must be addressed to ensure stability, low latency, and
+high availability.</p>
+<h3 id="storage-persistence-and-io-performance">Storage Persistence and
+I/O Performance</h3>
+<p>Distributed NoSQL systems (such as Cassandra, MongoDB, or ScyllaDB)
+are heavily I/O-bound and sensitive to disk latency.</p>
+<ul>
+<li><strong>Storage Type:</strong> Network-attached storage (NAS or
+standard cloud block storage) often introduces unpredictable latency
+spikes and I/O throughput bottlenecks. For high-throughput workloads,
+using local NVMe drives provisioned via the Local Storage Operator is
+preferred.</li>
+<li><strong>Volume Management:</strong> Ephemeral container storage must
+not be used for database data. Dynamic provisioning through the
+Container Storage Interface (CSI) must utilize Persistent Volumes (PVs)
+and Persistent Volume Claims (PVCs) configured with
+<code>volumeBindingMode: WaitForFirstConsumer</code> to ensure pods are
+scheduled on nodes where storage is physically accessible.</li>
+<li><strong>Reclamation Policies:</strong> Set the
+<code>persistentVolumeReclaimPolicy</code> to <code>Retain</code> to
+prevent catastrophic data loss if a pod or PVC is accidentally
+deleted.</li>
+</ul>
+<h3 id="stateful-identity-and-pod-orchestration">Stateful Identity and
+Pod Orchestration</h3>
+<p>Standard Kubernetes Deployments treat containers as interchangeable,
+which breaks distributed databases that rely on persistent node
+identities and localized state.</p>
+<ul>
+<li><strong>StatefulSets:</strong> Always deploy database nodes using
+StatefulSets rather than Deployments or ReplicaSets. StatefulSets
+provide stable, unique network identifiers (e.g., <code>db-0</code>,
+<code>db-1</code>), persistent storage bindings that follow the pod
+across restarts, and ordered, graceful deployment and termination.</li>
+<li><strong>Graceful Decommissioning:</strong> Scaling down a database
+requires the node to stream its data to remaining peers before
+terminating. A basic <code>SIGTERM</code> followed by a forced
+<code>SIGKILL</code> will cause data inconsistency. Implement
+<code>preStop</code> lifecycle hooks to trigger the native database
+decommission or drain command before the container stops.</li>
+</ul>
+<h3 id="network-topology-and-cluster-awareness">Network Topology and
+Cluster Awareness</h3>
+<p>Distributed NoSQL databases utilize internal consensus protocols
+(like Paxos or Raft) and peer-to-peer gossip protocols that depend on
+direct, low-latency communication.</p>
+<ul>
+<li><strong>Network Latency:</strong> Kubernetes overlay networks (CNIs
+using VXLAN or Geneve encapsulation) add CPU and latency overhead.
+High-performance deployments benefit from CNIs capable of direct routing
+(such as Calico with eBPF or cloud-native VPC CNIs) or using
+<code>hostNetwork: true</code> where security boundaries permit.</li>
+<li><strong>Topology Spread and Anti-Affinity:</strong> Database
+replicas must never run on the same physical failure domain. Use
+<code>podAntiAffinity</code> and <code>topologySpreadConstraints</code>
+to ensure pods are evenly distributed across different worker nodes,
+server racks, and availability zones.</li>
+<li><strong>Rack Awareness:</strong> Map the database’s internal
+rack-awareness configuration directly to Kubernetes failure zones using
+node labels to ensure read/write operations retain high availability
+during zone outages.</li>
+</ul>
+<h3 id="resource-allocation-and-quality-of-service-qos">Resource
+Allocation and Quality of Service (QoS)</h3>
+<p>Resource starvation or container evictions can disrupt cluster quorum
+and cause cascading failures.</p>
+<ul>
+<li><strong>Guaranteed QoS:</strong> Define both <code>requests</code>
+and <code>limits</code> with identical values for CPU and memory. This
+places the database pods into the <code>Guaranteed</code> Quality of
+Service tier, minimizing the risk of the Linux Out-Of-Memory (OOM)
+killer terminating critical database processes.</li>
+<li><strong>Memory Management:</strong> Ensure memory limits account for
+both application heap sizes (such as JVM memory in Cassandra) and the
+operating system page cache, which many NoSQL databases utilize heavily
+for read caching.</li>
+<li><strong>CPU Throttling:</strong> Ensure standard CFS (Completely
+Fair Scheduler) quota mechanisms do not throttle database threads during
+traffic bursts. Use the static CPU management policy on the kubelet to
+assign dedicated CPU cores to database pods.</li>
+</ul>
+<h3 id="operational-lifecycle-and-kubernetes-operators">Operational
+Lifecycle and Kubernetes Operators</h3>
+<p>Managing operations like version upgrades, schema migrations,
+automated failover, and cluster expansion requires complex coordination
+that native Kubernetes primitives cannot handle alone.</p>
+<ul>
+<li><strong>Kubernetes Operators:</strong> Rather than relying on static
+manifests or simple Helm charts, utilize production-grade Kubernetes
+Operators (such as the K8ssandra Operator or MongoDB Community
+Operator). Operators embed operational domain knowledge into custom
+controllers, automating tasks such as rolling updates without downtime,
+node repair, and cluster-wide coordinated backups.</li>
+</ul></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/running-distributed-no-sql-databases-on-kubernetes';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Graph Databases Compute Native PageRank - nosql</title>
+    <meta name="description" content="Graph NoSQL platforms calculate PageRank across billions of nodes by embedding iterative matrix algorithms directly into their distributed storage engines. Rather than exporting topology data to external compute engines like Apache Spark, modern graph dat">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/how-graph-databases-compute-native-page-rank">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Graph Databases Compute Native PageRank - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/how-graph-databases-compute-native-page-rank" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Graph NoSQL platforms calculate PageRank across billions of nodes by embedding iterative matrix algorithms directly into their distributed storage engines. Rather than exporting topology data to external compute engines like Apache Spark, modern graph dat" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-graph-databases-compute-native-pagerank">How Graph Databases
+Compute Native PageRank</h1>
+<p>Graph NoSQL platforms calculate PageRank across billions of nodes by
+embedding iterative matrix algorithms directly into their distributed
+storage engines. Rather than exporting topology data to external compute
+engines like Apache Spark, modern graph databases leverage
+vertex-centric computation models, shared-memory parallelism, and
+optimized graph partitioning to execute iterations locally. This article
+explores the architecture behind native PageRank computation, detailing
+how message-passing models, in-memory representations, and convergence
+thresholds enable linear scalability across massive datasets.</p>
+<h3 id="the-shift-to-native-in-database-execution">The Shift to Native
+In-Database Execution</h3>
+<p>Traditional approaches to running PageRank on large graphs required
+extracting nodes and relationships to external batch-processing
+clusters. This extract, transform, load (ETL) pipeline introduces
+significant network latency and memory overhead.</p>
+<p>Modern native graph platforms eliminate this bottleneck by
+integrating graph analytical processing engines alongside their
+transactional storage layers. By operating directly on stored
+topologies, these platforms execute PageRank in memory without
+serializing data across network boundaries, dramatically reducing total
+execution time.</p>
+<h3 id="vertex-centric-distributed-processing">Vertex-Centric
+Distributed Processing</h3>
+<p>Native graph engines compute PageRank using the Bulk Synchronous
+Parallel (BSP) model, popularized by Google's Pregel. This approach
+processes graphs from a vertex-centric perspective ("think like a
+vertex"):</p>
+<ol type="1">
+<li><strong>Initialization:</strong> Every node in the graph is assigned
+an initial PageRank value, typically calculated as <span
+class="math inline">\(1/N\)</span>, where <span
+class="math inline">\(N\)</span> is the total count of nodes.</li>
+<li><strong>Scatter Phase:</strong> Each vertex divides its current rank
+by its out-degree and sends that value as a message across its outgoing
+edges to neighboring vertices.</li>
+<li><strong>Barrier Synchronization:</strong> The system waits until all
+vertices have finished sending and receiving messages for the current
+iteration.</li>
+<li><strong>Gather Phase:</strong> Each vertex sums the incoming values
+from its inbound neighbors, applies the damping factor (traditionally
+set to 0.85), and updates its internal rank.</li>
+<li><strong>Iteration Loop:</strong> This cycle repeats until the scores
+stabilize according to a defined tolerance threshold or a fixed number
+of iterations is reached.</li>
+</ol>
+<h3 id="compressed-in-memory-representations">Compressed In-Memory
+Representations</h3>
+<p>Traversing standard operational graph structures—such as index-free
+adjacency pointers designed for localized transactions—incurs
+significant cache misses during global sweeps like PageRank.</p>
+<p>To overcome this, native graph algorithms project the active graph
+into temporary, highly compressed in-memory structures before computing
+PageRank. Platforms frequently use variations of Compressed Sparse Row
+(CSR) or Compressed Sparse Column (CSC) formats. These continuous memory
+arrays pack vertex identifiers and degree counts contiguously,
+maximizing CPU cache utilization and allowing vectorization instructions
+(such as AVX) to process multiple edge updates concurrently.</p>
+<h3 id="smart-partitioning-and-network-minimization">Smart Partitioning
+and Network Minimization</h3>
+<p>When a graph spans multiple machines in a distributed NoSQL cluster,
+message passing between nodes on different servers introduces network
+latency. Native platforms mitigate this through topological
+partitioning:</p>
+<ul>
+<li><strong>Edge-Cut vs. Vertex-Cut:</strong> Systems implement
+vertex-cut partitioning, which splits high-degree "hub" nodes across
+multiple physical machines. This mirrors the hub across partitions,
+converting expensive global network calls into cheap local
+aggregations.</li>
+<li><strong>Message Batching:</strong> Instead of sending individual
+messages across the network for every traversed edge, worker nodes batch
+messages bound for the same machine, dispatching them in single
+compressed payloads per iteration.</li>
+<li><strong>Local Aggregation:</strong> Inbound rank values destined for
+a mirrored vertex are partially aggregated on the remote worker node
+before transmission, minimizing network throughput.</li>
+</ul>
+<h3 id="delta-based-early-termination">Delta-Based Early
+Termination</h3>
+<p>To further optimize performance on massive topologies, native graph
+engines use delta PageRank. Instead of propagating absolute PageRank
+scores in every round, nodes track changes (deltas) in their scores.</p>
+<p>If a vertex's rank changes by an amount lower than a configured
+epsilon value, it becomes inactive and stops broadcasting updates along
+its edges for subsequent iterations. This allows processing power to
+focus strictly on volatile segments of the graph, converging
+significantly faster than full-graph iterative models.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/how-graph-databases-compute-native-page-rank';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

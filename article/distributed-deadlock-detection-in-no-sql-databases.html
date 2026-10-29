@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Distributed Deadlock Detection in NoSQL Databases - nosql</title>
+    <meta name="description" content="This article explores how distributed NoSQL databases identify and resolve deadlocks that arise during multi-node, concurrent transactions. While early NoSQL architectures bypassed deadlock issues by enforcing eventual consistency or single-key atomicity,">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/distributed-deadlock-detection-in-no-sql-databases">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Distributed Deadlock Detection in NoSQL Databases - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/distributed-deadlock-detection-in-no-sql-databases" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explores how distributed NoSQL databases identify and resolve deadlocks that arise during multi-node, concurrent transactions. While early NoSQL architectures bypassed deadlock issues by enforcing eventual consistency or single-key atomicity," />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="distributed-deadlock-detection-in-nosql-databases">Distributed
+Deadlock Detection in NoSQL Databases</h1>
+<p>This article explores how distributed NoSQL databases identify and
+resolve deadlocks that arise during multi-node, concurrent transactions.
+While early NoSQL architectures bypassed deadlock issues by enforcing
+eventual consistency or single-key atomicity, modern distributed systems
+supporting multi-document ACID transactions must actively manage
+cross-node resource contention. The following sections examine the
+underlying mechanics of distributed Wait-For Graphs (WFGs), probe-based
+edge-chasing algorithms, timestamp-based prevention mechanisms, and
+victim selection strategies used to maintain system throughput and
+consistency.</p>
+<h3 id="concurrency-and-deadlocks-in-modern-nosql">Concurrency and
+Deadlocks in Modern NoSQL</h3>
+<p>Distributed deadlocks occur when two or more transactions across
+different cluster nodes hold locks that the others require, creating a
+circular dependency where none can proceed. Modern distributed NoSQL
+databases (such as CockroachDB, Google Cloud Spanner, and MongoDB with
+multi-document transactions) rely on Two-Phase Locking (2PL),
+Multi-Version Concurrency Control (MVCC), or hybrid models to guarantee
+serializability. When transactions acquire pessimistic exclusive locks
+on data partitions distributed across multiple shards, circular wait
+states become inevitable without coordinated detection or
+prevention.</p>
+<h3 id="distributed-wait-for-graphs-wfg">Distributed Wait-For Graphs
+(WFG)</h3>
+<p>A common method for detecting distributed deadlocks is constructing a
+global Wait-For Graph (WFG), where vertices represent transactions and
+directed edges represent lock dependencies (Transaction A is waiting for
+Transaction B).</p>
+<ul>
+<li><strong>Centralized Detection:</strong> Each node maintains a local
+WFG representing dependencies within its local partition. Periodically,
+nodes transmit their local graphs to a centralized deadlock detector.
+The coordinator merges these graphs into a global WFG and executes
+cycle-detection algorithms, such as Tarjan's strongly connected
+components algorithm or depth-first search (DFS). If a directed cycle is
+identified, a deadlock exists.</li>
+<li><strong>Hierarchical Detection:</strong> To prevent the central
+coordinator from becoming a bottleneck, databases can organize nodes
+into a tree hierarchy. Intermediate nodes aggregate local graphs from
+leaf nodes, resolving regional deadlocks early and forwarding only
+cross-region dependency data to the root.</li>
+</ul>
+<h3 id="edge-chasing-path-pushing-algorithms">Edge-Chasing
+(Path-Pushing) Algorithms</h3>
+<p>Because maintaining a centralized graph incurs substantial
+communication overhead, many distributed databases implement
+edge-chasing algorithms, most notably variants of the Chandy-Misra-Haas
+algorithm.</p>
+<p>Rather than aggregating dependency graphs, edge-chasing identifies
+cycles through special network messages called "probes":</p>
+<ol type="1">
+<li><strong>Initiation:</strong> When a transaction experiences a lock
+acquisition delay exceeding a defined threshold, the hosting node
+initiates a probe message.</li>
+<li><strong>Propagation:</strong> The probe contains the identifier of
+the initiating transaction and the dependency path. The message travels
+along the lock-wait dependency edges from the waiting node to the lock
+holder's node.</li>
+<li><strong>Cycle Confirmation:</strong> If a transaction receives a
+probe containing its own identifier, the probe has traversed a closed
+loop, confirming the existence of a distributed deadlock.</li>
+</ol>
+<p>Edge-chasing eliminates the single point of failure inherent in
+centralized graph collectors and scales effectively in horizontally
+partitioned architectures.</p>
+<h3 id="deadlock-prevention-vs-detection">Deadlock Prevention vs.
+Detection</h3>
+<p>Due to the latency and message overhead of active graph resolution,
+many distributed NoSQL engines combine or replace detection algorithms
+with timestamp-based deadlock prevention schemes.</p>
+<ul>
+<li><strong>Wait-Die Scheme (Non-preemptive):</strong> Older
+transactions are allowed to wait for younger transactions. If a younger
+transaction attempts to access a resource locked by an older one, the
+younger transaction is aborted ("dies") and restarted.</li>
+<li><strong>Wound-Wait Scheme (Preemptive):</strong> Older transactions
+preempt ("wound") younger ones holding required locks, forcing the
+younger transaction to abort and roll back. Younger transactions
+requesting resources from older ones are permitted to wait.</li>
+<li><strong>Lock Wait Timeouts:</strong> A simplistic fallback where
+transactions abort automatically if a lock cannot be acquired within a
+configured interval. While crude, this approach prevents perpetual
+blocking when edge-chasing messages are delayed or dropped due to
+network partitions.</li>
+</ul>
+<h3 id="resolution-and-victim-selection">Resolution and Victim
+Selection</h3>
+<p>Once an algorithm flags a circular dependency, the database must
+break the cycle by terminating one or more participating transactions.
+The engine evaluates several criteria to select an optimal "victim" to
+abort:</p>
+<ul>
+<li><strong>Transaction Age:</strong> Prioritizing older transactions to
+prevent starvation.</li>
+<li><strong>Work Cost:</strong> Aborting the transaction that has
+modified the fewest records or consumed the fewest compute resources,
+minimizing rollback penalties.</li>
+<li><strong>Lock Footprint:</strong> Selecting the transaction holding
+locks that unblock the largest number of stalled operations.</li>
+</ul>
+<p>After the victim is aborted, its acquired locks are released across
+all participating shards, and the transaction is typically rescheduled
+with an exponential backoff jitter to prevent immediate recurrence of
+the conflict.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/distributed-deadlock-detection-in-no-sql-databases';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

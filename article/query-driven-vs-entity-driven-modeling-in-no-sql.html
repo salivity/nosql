@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Query-Driven vs Entity-Driven Modeling in NoSQL - nosql</title>
+    <meta name="description" content="Query-driven data modeling is the foundation of high-performance NoSQL architecture, prioritizing application access patterns over abstract real-world relationships. While entity-driven modeling focuses on normalizing entities to eliminate redundancy, que">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/query-driven-vs-entity-driven-modeling-in-no-sql">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Query-Driven vs Entity-Driven Modeling in NoSQL - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/query-driven-vs-entity-driven-modeling-in-no-sql" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Query-driven data modeling is the foundation of high-performance NoSQL architecture, prioritizing application access patterns over abstract real-world relationships. While entity-driven modeling focuses on normalizing entities to eliminate redundancy, que" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="query-driven-vs-entity-driven-modeling-in-nosql">Query-Driven vs
+Entity-Driven Modeling in NoSQL</h1>
+<p>Query-driven data modeling is the foundation of high-performance
+NoSQL architecture, prioritizing application access patterns over
+abstract real-world relationships. While entity-driven modeling focuses
+on normalizing entities to eliminate redundancy, query-driven modeling
+structures data specifically to satisfy predefined read and write
+operations. In distributed systems, this operational shift is critical
+for achieving horizontal scalability, predictable low latency, and
+efficient resource utilization.</p>
+<h3 id="the-cost-of-joins-in-distributed-architectures">The Cost of
+Joins in Distributed Architectures</h3>
+<p>Entity-driven modeling originated in relational database management
+systems (RDBMS), where data is normalized into discrete tables
+representing real-world entities (such as Users, Orders, and Products).
+Relationships between these entities are resolved at runtime using
+relational joins.</p>
+<p>In a distributed NoSQL environment, data is partitioned and
+distributed across multiple physical nodes. Executing a relational join
+across partitioned data requires a "scatter-gather" operation or
+cross-node data shuffling over the network. This network round-trip
+latency eliminates the performance advantages of distributed computing,
+creating massive I/O bottlenecks and unpredictable response times.
+Query-driven modeling avoids this by embedding related data together or
+co-locating it within the same partition, eliminating the need for
+runtime joins entirely.</p>
+<h3 id="designing-for-partitioning-and-locality">Designing for
+Partitioning and Locality</h3>
+<p>Distributed NoSQL databases (such as Apache Cassandra, Amazon
+DynamoDB, and MongoDB) rely on partition keys to distribute data across
+a cluster.</p>
+<ul>
+<li><strong>Entity-driven design</strong> often assigns partition keys
+based on entity identities (e.g., <code>UserID</code>), regardless of
+how the data will be consumed. This frequently leads to multiple
+round-trips to assemble a single application view.</li>
+<li><strong>Query-driven design</strong> analyzes the read path first.
+By knowing the exact parameters an application uses to fetch data,
+designers can select partition keys and sort keys that allow entire
+query results to be read sequentially from a single physical partition.
+This concept, known as data locality, guarantees that a read request
+touches the minimum number of nodes possible.</li>
+</ul>
+<h3 id="optimizing-through-denormalization">Optimizing Through
+Denormalization</h3>
+<p>Entity-driven modeling treats data duplication as an architectural
+flaw. Conversely, query-driven modeling embraces denormalization as an
+optimization strategy.</p>
+<p>Because modern cloud storage is inexpensive compared to compute and
+network bandwidth, query-driven modeling trades redundant storage for
+compute efficiency. If two different application views require the same
+core entity with different filters or aggregations, the data is written
+twice in two distinct, pre-computed structures. The application writes
+data in the exact format it expects to read, moving the computational
+burden from the read path (which is executed constantly) to the write
+path.</p>
+<h3 id="predictable-latency-at-scale">Predictable Latency at Scale</h3>
+<p>High-traffic applications require consistent performance regardless
+of dataset size. In an entity-driven model, as data volume grows, the
+complexity of dynamically joining and filtering tables increases query
+latency.</p>
+<p>With query-driven design, each query operates on an index or
+partition tailored to that specific access pattern. Because the data
+layout directly mirrors the application's queries, read operations
+typically achieve <span class="math inline">\(O(1)\)</span> or <span
+class="math inline">\(O(\log N)\)</span> time complexity. This makes
+latency predictable at any scale, whether the database contains
+gigabytes or petabytes of information.</p>
+<h3 id="cloud-cost-efficiency">Cloud Cost Efficiency</h3>
+<p>Modern cloud-hosted NoSQL databases frequently bill based on consumed
+Read Capacity Units (RCUs) and Write Capacity Units (WCUs). In an
+entity-driven design that requires multiple network queries or broad
+table scans to retrieve related data, operational costs increase
+exponentially. A query-driven schema retrieves the exact payload
+required in a single targeted request, directly reducing compute
+consumption and infrastructure costs.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/query-driven-vs-entity-driven-modeling-in-no-sql';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

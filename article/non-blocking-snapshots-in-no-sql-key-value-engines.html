@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Non-Blocking Snapshots in NoSQL Key-Value Engines - nosql</title>
+    <meta name="description" content="Modern NoSQL key-value engines achieve high-availability persistent snapshots without halting write operations by decoupling data reading from active mutations. Through core mechanisms such as immutable storage architectures (LSM-trees), OS-level Copy-on-">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/non-blocking-snapshots-in-no-sql-key-value-engines">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Non-Blocking Snapshots in NoSQL Key-Value Engines - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/non-blocking-snapshots-in-no-sql-key-value-engines" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Modern NoSQL key-value engines achieve high-availability persistent snapshots without halting write operations by decoupling data reading from active mutations. Through core mechanisms such as immutable storage architectures (LSM-trees), OS-level Copy-on-" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="non-blocking-snapshots-in-nosql-key-value-engines">Non-Blocking
+Snapshots in NoSQL Key-Value Engines</h1>
+<p>Modern NoSQL key-value engines achieve high-availability persistent
+snapshots without halting write operations by decoupling data reading
+from active mutations. Through core mechanisms such as immutable storage
+architectures (LSM-trees), OS-level Copy-on-Write (CoW) memory forking,
+and Multi-Version Concurrency Control (MVCC), these engines create an
+isolated point-in-time view of the dataset. This allows background
+threads or external processes to flush a consistent state to durable
+storage while the foreground engine continues processing incoming writes
+at full throughput.</p>
+<h3
+id="log-structured-merge-trees-and-storage-immutability">Log-Structured
+Merge-Trees and Storage Immutability</h3>
+<p>The majority of high-throughput key-value engines (such as RocksDB
+and Cassandra) utilize Log-Structured Merge-tree (LSM) architectures,
+where data immutability is fundamental.</p>
+<p>When a write arrives, the engine appends it to an in-memory buffer
+called a MemTable and logs it sequentially to a Write-Ahead Log (WAL).
+When a snapshot is triggered:</p>
+<ol type="1">
+<li>The engine switches the current active MemTable into a read-only
+state and immediately allocates a brand-new MemTable to receive
+continuous incoming writes.</li>
+<li>The data already persisted to disk lives in immutable files known as
+SSTables (Sorted String Tables). Because existing SSTables are never
+modified in place—only merged and rewritten during background
+compaction—their contents will not be altered by concurrent writes.</li>
+<li>The engine creates lightweight metadata references (often
+implemented using filesystem hard links or manifest file pointers) to
+the immutable SSTables and the frozen MemTable.</li>
+</ol>
+<p>Because the files representing the point-in-time state cannot be
+modified, background processes can safely serialize or back them up
+without requiring locks on write paths.</p>
+<h3 id="copy-on-write-cow-process-forking">Copy-on-Write (CoW) Process
+Forking</h3>
+<p>In-memory key-value stores with persistence capabilities, such as
+Redis (via RDB snapshots), leverage the host operating system’s virtual
+memory management via the <code>fork()</code> system call.</p>
+<p>When a background snapshot initiates:</p>
+<ol type="1">
+<li>The database process invokes <code>fork()</code>, generating an
+exact child process duplicate of the running instance.</li>
+<li>Rather than duplicating physical memory immediately, the OS marks
+all memory pages as read-only and shares them between the parent and
+child process via Copy-on-Write.</li>
+<li>The child process reads this frozen memory map sequentially and
+writes it to a persistent snapshot file on disk.</li>
+<li>When incoming writes hit the parent process, the underlying
+operating system transparently duplicates the specific memory pages
+being altered. The parent writes to the newly allocated page, while the
+child's view of the original page remains untouched.</li>
+</ol>
+<p>This process enables full-speed writes with the only overhead being
+the incremental memory allocation needed for mutated pages during the
+snapshot window.</p>
+<h3
+id="multi-version-concurrency-control-mvcc-and-sequence-numbers">Multi-Version
+Concurrency Control (MVCC) and Sequence Numbers</h3>
+<p>Engines that do not rely strictly on process-level forking often
+implement MVCC by assigning every write operation a monotonically
+increasing sequence number or logical timestamp.</p>
+<ol type="1">
+<li>When a snapshot is requested, the engine records the current maximum
+sequence number (often called the
+<code>Snapshot Sequence Number</code>).</li>
+<li>Concurrent write operations continue unhindered, but their updates
+are assigned higher sequence numbers than the snapshot marker.</li>
+<li>The background snapshot reader traverses the dataset using a filter
+that only processes record versions with a sequence number less than or
+equal to the recorded snapshot threshold.</li>
+<li>If an existing key is updated or deleted during the snapshot run,
+the database retains the older historical version of the record until
+the snapshot reader has finished writing the baseline data to disk.</li>
+</ol>
+<p>Once the snapshot is complete, standard background compaction and
+garbage collection routines clean up the superseded versions, leaving
+performance unaffected throughout the snapshot lifecycle.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/non-blocking-snapshots-in-no-sql-key-value-engines';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

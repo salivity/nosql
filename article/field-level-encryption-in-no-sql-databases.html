@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Field-Level Encryption in NoSQL Databases - nosql</title>
+    <meta name="description" content="Field-level encryption (FLE) protects sensitive data in NoSQL databases by encrypting specific, high-risk attributes within a document or record before they are stored, ensuring that unauthorized users and database administrators cannot read the raw value">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/field-level-encryption-in-no-sql-databases">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Field-Level Encryption in NoSQL Databases - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/field-level-encryption-in-no-sql-databases" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Field-level encryption (FLE) protects sensitive data in NoSQL databases by encrypting specific, high-risk attributes within a document or record before they are stored, ensuring that unauthorized users and database administrators cannot read the raw value" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="field-level-encryption-in-nosql-databases">Field-Level
+Encryption in NoSQL Databases</h1>
+<p>Field-level encryption (FLE) protects sensitive data in NoSQL
+databases by encrypting specific, high-risk attributes within a document
+or record before they are stored, ensuring that unauthorized users and
+database administrators cannot read the raw values. This article
+explores how field-level encryption works in NoSQL environments, the
+mechanics of client-side key management, how encrypted data can still be
+queried, and why this approach is critical for modern regulatory
+compliance and zero-trust security architectures.</p>
+<h2 id="the-mechanics-of-field-level-encryption">The Mechanics of
+Field-Level Encryption</h2>
+<p>Unlike transparent data encryption (TDE) or full-disk encryption,
+which encrypt the entire storage volume at rest, field-level encryption
+operates at the document or record schema level. In a NoSQL document
+store (such as MongoDB or Couchbase) or a wide-column store (such as
+Apache Cassandra), individual fields—such as Social Security numbers,
+credit card details, or medical records—are targeted specifically for
+cryptographic transformation.</p>
+<p>The standard implementation model is Client-Side Field-Level
+Encryption (CSFLE). In CSFLE:</p>
+<ol type="1">
+<li><strong>Client-Side Parsing:</strong> The client driver or
+application layer inspects outgoing data against a predefined encryption
+schema.</li>
+<li><strong>Key Retrieval and Encryption:</strong> The client uses a
+local Data Encryption Key (DEK) to encrypt designated fields using
+algorithms such as AES-256 in CBC or GCM mode.</li>
+<li><strong>Storage:</strong> The document is transmitted across the
+network with only the targeted fields converted into ciphertext (binary
+or base64-encoded strings). The database engine receives and persists
+the encrypted payload without ever having access to the plaintext data
+or the encryption keys.</li>
+</ol>
+<h2 id="key-management-and-key-wrapping">Key Management and Key
+Wrapping</h2>
+<p>Field-level encryption separates data management from key management.
+NoSQL systems typically leverage an envelope encryption strategy:</p>
+<ul>
+<li><strong>Data Encryption Keys (DEKs):</strong> Used directly to
+encrypt and decrypt the designated fields in a document.</li>
+<li><strong>Customer Master Keys (CMKs) or Key Encryption Keys
+(KEKs):</strong> Stored securely inside a centralized Key Management
+Service (KMS), such as AWS KMS, Google Cloud KMS, Azure Key Vault, or a
+dedicated HashiCorp Vault instance.</li>
+</ul>
+<p>When the application needs to read or write data, it requests the KMS
+to unwrap the encrypted DEK. The unwrapped DEK exists temporarily in the
+client application's memory to perform encryption or decryption and is
+never exposed to the NoSQL server.</p>
+<h2 id="querying-encrypted-fields">Querying Encrypted Fields</h2>
+<p>Querying encrypted attributes in NoSQL databases presents a technical
+challenge, as standard search algorithms cannot parse ciphertext. NoSQL
+systems resolve this using two distinct encryption types:</p>
+<ul>
+<li><strong>Deterministic Encryption:</strong> Always generates the same
+ciphertext for a given plaintext value and key. This allows the database
+to perform direct equality matches (<code>field = "value"</code>)
+because the query parameter is encrypted on the client side before the
+query is executed. While slightly less secure than randomized encryption
+due to vulnerability to frequency analysis, it allows basic search
+functionality without server-side decryption.</li>
+<li><strong>Randomized Encryption:</strong> Uses a unique initialization
+vector (IV) for every encryption operation, meaning the same plaintext
+yields entirely different ciphertexts each time. This provides the
+highest level of cryptographic security, but prevents the database from
+running any queries against that field.</li>
+<li><strong>Queryable Encryption:</strong> Advanced implementations
+utilize structured encryption techniques, enabling equality and range
+queries on randomized ciphertext without exposing cryptographic keys to
+the database engine.</li>
+</ul>
+<h2 id="core-security-benefits">Core Security Benefits</h2>
+<p>Field-level encryption provides targeted security advantages tailored
+to distributed NoSQL architectures:</p>
+<ul>
+<li><strong>Protection Against Database Compromise:</strong> Even if an
+attacker gains root access to the database server, steals backups, or
+reads memory dumps, the sensitive fields remain undecryptable without
+client-managed KMS access.</li>
+<li><strong>Separation of Duties:</strong> Database administrators
+(DBAs) can manage indexing, replication, sharding, and backups without
+having visibility into personally identifiable information (PII) or
+protected health information (PHI).</li>
+<li><strong>Simplified Compliance:</strong> It directly satisfies strict
+zero-trust, data privacy, and data residency mandates under frameworks
+like PCI-DSS, HIPAA, and GDPR.</li>
+<li><strong>Cryptographic Erasure:</strong> Deleting a specific DEK
+permanently renders all fields encrypted with that key completely
+unreadable, providing an efficient way to honor "right to be forgotten"
+requests across distributed replicas and immutable backups.</li>
+</ul></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/field-level-encryption-in-no-sql-databases';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

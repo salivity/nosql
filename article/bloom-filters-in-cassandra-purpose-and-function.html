@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bloom Filters in Cassandra: Purpose and Function - nosql</title>
+    <meta name="description" content="In wide-column NoSQL databases like Apache Cassandra, Bloom filters serve as a critical performance optimization layer designed to minimize expensive disk I/O operations during read requests. Because these storage engines rely on Log-Structured Merge-tree">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/bloom-filters-in-cassandra-purpose-and-function">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Bloom Filters in Cassandra: Purpose and Function - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/bloom-filters-in-cassandra-purpose-and-function" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In wide-column NoSQL databases like Apache Cassandra, Bloom filters serve as a critical performance optimization layer designed to minimize expensive disk I/O operations during read requests. Because these storage engines rely on Log-Structured Merge-tree" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="bloom-filters-in-cassandra-purpose-and-function">Bloom Filters
+in Cassandra: Purpose and Function</h1>
+<p>In wide-column NoSQL databases like Apache Cassandra, Bloom filters
+serve as a critical performance optimization layer designed to minimize
+expensive disk I/O operations during read requests. Because these
+storage engines rely on Log-Structured Merge-tree (LSM-tree)
+architectures where data is distributed across multiple immutable
+on-disk files called SSTables, locating a specific row could require
+scanning every single file. A Bloom filter acts as a fast, in-memory
+probabilistic gatekeeper that determines whether a specific SSTable
+definitely does not contain a partition key or might contain it,
+allowing the database to bypass non-relevant disk files entirely.</p>
+<h3 id="the-problem-read-amplification-in-lsm-engines">The Problem: Read
+Amplification in LSM Engines</h3>
+<p>To understand the purpose of a Bloom filter, it is necessary to
+examine how databases like Cassandra write and read data. Writes are
+first written sequentially to a commit log for durability and
+simultaneously applied to an in-memory buffer called a Memtable. When
+the Memtable fills up, it is flushed to disk as an immutable SSTable
+(Sorted String Table).</p>
+<p>Over time, this results in dozens or hundreds of SSTables for a
+single table. When a read query arrives for a specific partition key,
+that key could theoretically reside in any of the flushed SSTables.
+Without an optimization mechanism, Cassandra would need to perform disk
+seeks on every SSTable to find the requested data, leading to severe
+read amplification and degraded query latency.</p>
+<h3 id="how-bloom-filters-work">How Bloom Filters Work</h3>
+<p>A Bloom filter is an extremely space-efficient, probabilistic data
+structure. It uses an array of bits and multiple independent
+cryptographic or non-cryptographic hash functions to represent set
+membership.</p>
+<p>When an SSTable is written to disk, Cassandra simultaneously
+generates a corresponding Bloom filter in system memory (RAM). For every
+partition key stored in that SSTable:</p>
+<ol type="1">
+<li>The key is fed through multiple hash functions.</li>
+<li>The outputs of these hashes correspond to specific bit positions in
+the filter's bit array.</li>
+<li>Those positions are set to <code>1</code>.</li>
+</ol>
+<p>When testing for the presence of a key during a read request, the
+database hashes the target key with the same functions:</p>
+<ul>
+<li><strong>Definite Negative:</strong> If any of the corresponding bits
+are <code>0</code>, the partition key <strong>definitely does not
+exist</strong> in that SSTable. Cassandra immediately skips reading the
+SSTable from disk.</li>
+<li><strong>Possible Positive:</strong> If all corresponding bits are
+<code>1</code>, the key <strong>might exist</strong> in that SSTable.
+Cassandra proceeds to read the SSTable’s partition index and data file
+to retrieve the row.</li>
+</ul>
+<h3 id="guaranteed-accuracy-vs-false-positives">Guaranteed Accuracy vs.
+False Positives</h3>
+<p>A Bloom filter guarantees <strong>zero false negatives</strong>. If
+data exists in an SSTable, the filter will never claim it is absent.</p>
+<p>However, because different keys can hash to the same bit positions,
+Bloom filters can produce <strong>false positives</strong>. A false
+positive means the filter indicates the key might be in the SSTable, but
+a subsequent disk read reveals it is not present. While a false positive
+does not compromise data integrity, it incurs an unnecessary disk
+seek.</p>
+<h3 id="performance-impact-and-tuning">Performance Impact and
+Tuning</h3>
+<p>By keeping Bloom filters in RAM, Cassandra filters out the vast
+majority of negative SSTable lookups in nanoseconds, reducing
+multi-millisecond disk access to only the SSTables that actually hold
+the requested partition.</p>
+<p>Cassandra allows operators to balance RAM consumption against disk
+I/O through the <code>bloom_filter_fp_chance</code> (false positive
+chance) configuration setting per table:</p>
+<ul>
+<li><strong>Lower False Positive Rate (e.g., 0.01 or 1%):</strong>
+Requires more RAM per key to maintain a larger bit array with more hash
+functions, but significantly reduces redundant disk operations. This is
+recommended for read-heavy workloads.</li>
+<li><strong>Higher False Positive Rate (e.g., 0.1 or 10%):</strong>
+Consumes less memory, freeing RAM for other caches or larger Memtables,
+but increases the number of wasted disk reads. This is suitable for
+write-heavy workloads with infrequent reads.</li>
+</ul></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/bloom-filters-in-cassandra-purpose-and-function';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

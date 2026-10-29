@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Non-Blocking Bulk Writes in Document NoSQL Databases - nosql</title>
+    <meta name="description" content="Document NoSQL databases maintain high read availability during massive bulk write operations by decoupling disk I/O from client transactions, isolating read views from active modifications, and minimizing lock contention. Through mechanisms like Multi-Ve">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/non-blocking-bulk-writes-in-document-no-sql-databases">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Non-Blocking Bulk Writes in Document NoSQL Databases - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/non-blocking-bulk-writes-in-document-no-sql-databases" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Document NoSQL databases maintain high read availability during massive bulk write operations by decoupling disk I/O from client transactions, isolating read views from active modifications, and minimizing lock contention. Through mechanisms like Multi-Ve" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="non-blocking-bulk-writes-in-document-nosql-databases">Non-Blocking
+Bulk Writes in Document NoSQL Databases</h1>
+<p>Document NoSQL databases maintain high read availability during
+massive bulk write operations by decoupling disk I/O from client
+transactions, isolating read views from active modifications, and
+minimizing lock contention. Through mechanisms like Multi-Version
+Concurrency Control (MVCC), in-memory write buffering, append-only
+logging, and document-level locking, modern document stores ensure that
+incoming queries execute concurrently against stable data snapshots
+while intensive data ingestion occurs in parallel.</p>
+<h3 id="multi-version-concurrency-control-mvcc">Multi-Version
+Concurrency Control (MVCC)</h3>
+<p>The primary technique used to eliminate read-write blocking is
+Multi-Version Concurrency Control. When a bulk write updates or inserts
+documents, the database engine does not overwrite the existing records
+in place. Instead, it generates a new version of the document with an
+associated transaction timestamp or sequence number.</p>
+<p>Incoming read queries are assigned a snapshot of the database at the
+exact moment the query starts. These queries read the latest committed
+versions visible to their snapshot, completely bypassing in-flight bulk
+writes. Because readers access older, stable versions of the data and
+writers create new versions, reads and writes never block each
+other.</p>
+<h3 id="in-memory-buffers-and-append-only-logs">In-Memory Buffers and
+Append-Only Logs</h3>
+<p>Bulk write operations avoid expensive, random disk access by
+executing primarily in memory:</p>
+<ol type="1">
+<li><strong>Write-Ahead Logging (WAL):</strong> Incoming write batches
+are sequentially appended to a write-ahead log (or journal) on disk.
+Sequential disk writes require minimal head movement or flash cell
+re-allocation, making them exponentially faster than random disk
+updates.</li>
+<li><strong>Memory Buffering:</strong> Simultaneously, writes are
+applied to in-memory structures (such as a memory cache in B-tree
+engines or MemTables in Log-Structured Merge-tree engines). Once the
+data is in the WAL and memory buffer, the database acknowledges the
+write operation to the client.</li>
+</ol>
+<p>Because the bulk write completes as soon as it reaches memory and the
+sequential log, storage pipelines do not freeze, allowing read
+operations to access cached data without waiting for persistent disk
+writes.</p>
+<h3 id="granular-locking-mechanisms">Granular Locking Mechanisms</h3>
+<p>Modern document databases have moved away from collection-level or
+database-level locks in favor of document-level locking and optimistic
+concurrency controls.</p>
+<p>During a bulk write, intent locks are placed at the higher database
+and collection levels, while exclusive locks are applied strictly to the
+individual documents being created or updated. Read queries targeting
+other documents within the same collection proceed unimpeded. Even when
+a query targets a document actively undergoing modification, MVCC allows
+the reader to safely retrieve the pre-write version without acquiring a
+lock on the document.</p>
+<h3 id="asynchronous-background-flushing-and-compaction">Asynchronous
+Background Flushing and Compaction</h3>
+<p>The heavy I/O cost of persisting bulk data to disk is deferred to
+asynchronous background threads.</p>
+<p>In B-tree-based engines (such as MongoDB's WiredTiger), dirty pages
+in memory are gradually reconciled and flushed to disk via background
+checkpointing processes. In LSM-tree engines, filled MemTables are
+flushed to disk as immutable files (SSTables), which background workers
+later merge and compact. These background processes are throttled to
+ensure they do not saturate system bandwidth, preserving sufficient I/O
+operations per second (IOPS) and CPU cycles to serve incoming
+queries.</p>
+<h3 id="distributed-partitioning-and-read-delegation">Distributed
+Partitioning and Read Delegation</h3>
+<p>In distributed document stores, non-blocking operations are further
+reinforced through cluster architecture:</p>
+<ul>
+<li><strong>Sharding:</strong> Bulk write requests are partitioned
+across multiple shards based on shard keys. This distributes processing
+and I/O workloads over distinct physical nodes, preventing any single
+machine from becoming a bottleneck.</li>
+<li><strong>Replica Reads:</strong> Read operations can be routed to
+secondary replicas using configurable read preference modes (e.g.,
+secondary preferred). While primary nodes process write-heavy workloads,
+read traffic is serviced by replica nodes, physically isolating read
+throughput from write ingestion.</li>
+</ul></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/non-blocking-bulk-writes-in-document-no-sql-databases';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

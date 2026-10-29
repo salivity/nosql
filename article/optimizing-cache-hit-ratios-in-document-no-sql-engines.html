@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Optimizing Cache Hit Ratios in Document NoSQL Engines - nosql</title>
+    <meta name="description" content="A high cache hit ratio is critical for maintaining low-latency reads and reducing expensive disk I/O in document NoSQL databases. This article explores actionable engineering strategies to optimize cache utilization, covering schema modeling, index refine">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/optimizing-cache-hit-ratios-in-document-no-sql-engines">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Optimizing Cache Hit Ratios in Document NoSQL Engines - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/optimizing-cache-hit-ratios-in-document-no-sql-engines" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="A high cache hit ratio is critical for maintaining low-latency reads and reducing expensive disk I/O in document NoSQL databases. This article explores actionable engineering strategies to optimize cache utilization, covering schema modeling, index refine" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="optimizing-cache-hit-ratios-in-document-nosql-engines">Optimizing
+Cache Hit Ratios in Document NoSQL Engines</h1>
+<p>A high cache hit ratio is critical for maintaining low-latency reads
+and reducing expensive disk I/O in document NoSQL databases. This
+article explores actionable engineering strategies to optimize cache
+utilization, covering schema modeling, index refinement, memory
+allocation, query isolation, and external caching layers. Implementing
+these techniques ensures that frequently requested data remains in
+memory, stabilizing database throughput under heavy workloads.</p>
+<h2 id="size-the-working-set-to-fit-memory">Size the Working Set to Fit
+Memory</h2>
+<p>The foundation of a high cache hit ratio is ensuring your working
+set—the subset of data and indexes actively accessed by your
+application—fits within available RAM.</p>
+<ul>
+<li><strong>Audit Document Size:</strong> Large, unbounded documents
+consume excessive memory. Strip out redundant metadata, prune historical
+audit trails, and move infrequently accessed attributes into secondary
+collections.</li>
+<li><strong>Normalize Bloated Embedded Arrays:</strong> While embedding
+is idiomatic in document stores, continuously growing arrays lead to
+document growth, frequent page evictions, and cache fragmentation. Use
+referencing for high-cardinality relationships.</li>
+</ul>
+<h2 id="utilize-covered-queries-and-selective-projections">Utilize
+Covered Queries and Selective Projections</h2>
+<p>Fetching full documents forces the storage engine to load entire
+pages into the cache, even if only a few fields are needed.</p>
+<ul>
+<li><strong>Design Covered Queries:</strong> Build compound indexes that
+include all fields requested by a query, including projection fields.
+When an index covers a query, the engine satisfies the request entirely
+from the index cache, avoiding the need to load full documents into
+memory.</li>
+<li><strong>Enforce Field Projections:</strong> Explicitly limit
+returned fields in queries. While database storage engines typically
+pull data pages at the block level, preventing unnecessary field
+processing conserves CPU and engine buffer capacity.</li>
+</ul>
+<h2 id="eliminate-cache-polluting-queries">Eliminate Cache-Polluting
+Queries</h2>
+<p>Full-collection scans and large analytical queries displace hot data
+from the Least Recently Used (LRU) cache, causing immediate performance
+degradation for standard transactional reads.</p>
+<ul>
+<li><strong>Prevent Unindexed Queries:</strong> Implement strict query
+profiling to identify unindexed lookups. Any query performing a full
+table or collection scan reads large volumes of cold pages from disk
+directly into memory, flushing out the hot working set.</li>
+<li><strong>Isolate Analytical Workloads:</strong> Route analytical
+reporting, bulk exports, and background batch jobs to dedicated
+secondary read replicas. This leaves the primary and dedicated
+operational read nodes with an unpolluted LRU cache dedicated solely to
+latency-sensitive traffic.</li>
+</ul>
+<h2 id="tune-engine-cache-allocation">Tune Engine Cache Allocation</h2>
+<p>Document engines such as MongoDB (WiredTiger) or Couchbase allow
+granular control over how much RAM is reserved for the storage engine
+versus the operating system filesystem cache.</p>
+<ul>
+<li><strong>Adjust Engine Buffer Limits:</strong> By default, engines
+often reserve 50% to 60% of available RAM for internal document and
+index caches, leaving the rest for the operating system page cache. If
+your workload rarely relies on the OS page cache, safely increase the
+engine's internal memory allocation to hold more uncompressed
+documents.</li>
+<li><strong>Tune Eviction Triggers:</strong> Configure dirty data and
+clean data eviction thresholds. Lowering the threshold for background
+thread eviction ensures the engine frees memory preemptively, avoiding
+stall spikes caused by aggressive, synchronous cache eviction during
+read bursts.</li>
+</ul>
+<h2 id="implement-an-external-cache-layer">Implement an External Cache
+Layer</h2>
+<p>For extreme read-heavy scenarios, rely on an external in-memory
+datastore like Redis or Memcached placed in front of the document
+database.</p>
+<ul>
+<li><strong>Read-Through / Cache-Aside Pattern:</strong> Cache
+frequently queried document payloads or pre-computed aggregation
+results. This deflects read traffic before it touches the document
+engine, effectively reserving the database's internal cache for true
+transactional updates and dynamic queries.</li>
+<li><strong>TTL-Based Invalidation:</strong> Apply short, rolling
+Time-To-Live (TTL) values to temporal reads to ensure the external cache
+handles traffic surges while automatically expiring stale documents
+without manual eviction overhead.</li>
+</ul></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/optimizing-cache-hit-ratios-in-document-no-sql-engines';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

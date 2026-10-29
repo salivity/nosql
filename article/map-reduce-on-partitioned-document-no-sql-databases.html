@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Map-Reduce on Partitioned Document NoSQL Databases - nosql</title>
+    <meta name="description" content="Distributed map-reduce in document-oriented NoSQL databases allows complex aggregations to be processed in parallel directly across a cluster of partitioned nodes. The engine leverages data locality by executing map operations concurrently on individual s">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/map-reduce-on-partitioned-document-no-sql-databases">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Map-Reduce on Partitioned Document NoSQL Databases - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/map-reduce-on-partitioned-document-no-sql-databases" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Distributed map-reduce in document-oriented NoSQL databases allows complex aggregations to be processed in parallel directly across a cluster of partitioned nodes. The engine leverages data locality by executing map operations concurrently on individual s" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="map-reduce-on-partitioned-document-nosql-databases">Map-Reduce
+on Partitioned Document NoSQL Databases</h1>
+<p>Distributed map-reduce in document-oriented NoSQL databases allows
+complex aggregations to be processed in parallel directly across a
+cluster of partitioned nodes. The engine leverages data locality by
+executing map operations concurrently on individual shards where the
+documents reside, routing intermediate key-value pairs across the
+network during a shuffle phase, and then executing reduce functions on
+target nodes to combine the results. This decentralized execution model
+avoids moving entire collections across the network, optimizing both
+memory usage and overall compute time for massive datasets.</p>
+<h3 id="partitioning-and-data-locality">Partitioning and Data
+Locality</h3>
+<p>Partitioned collections—often called sharded collections—distribute
+JSON-like documents across independent database nodes according to a
+defined partition (or shard) key. When a map-reduce job is dispatched, a
+coordinator node or query router inspects the query criteria. If the job
+targets the entire collection, the coordinator broadcasts the map-reduce
+specification to all shards hosting relevant chunks of data.</p>
+<p>Because documents are physically distributed, the primary
+optimization is data locality: processing the data where it lives.
+Instead of centralizing the records, each shard independently scans its
+local storage engine and evaluates the filter criteria before passing
+matching documents into the pipeline.</p>
+<h3 id="the-parallel-map-phase">The Parallel Map Phase</h3>
+<p>During the map phase, each shard executes the user-defined
+<code>map</code> JavaScript or native function against its local
+documents in parallel.</p>
+<ol type="1">
+<li><strong>Extraction:</strong> The map function inspects each matching
+document and extracts attributes of interest.</li>
+<li><strong>Emission:</strong> It emits zero, one, or multiple key-value
+pairs per document (<code>emit(key, value)</code>).</li>
+<li><strong>Local Combiner (Pre-aggregation):</strong> Many engines run
+an internal combine step on the local shard. If identical keys are
+emitted locally, a transient reduce operation combines them into a
+single intermediate structure. This drastically minimizes the volume of
+data that must travel across the network in the next phase.</li>
+</ol>
+<h3 id="the-shuffle-and-routing-phase">The Shuffle and Routing
+Phase</h3>
+<p>Once local processing is complete, the engine must group all emitted
+values associated with the same key onto a single node. This step is the
+shuffle phase.</p>
+<p>The cluster uses an internal hashing or range-partitioning scheme on
+the intermediate keys to determine which node acts as the reducer for
+which keys. The intermediate key-value pairs are serialized, buffered,
+and transferred over the internal network to their designated reducer
+nodes. If the output of the job is small or directed to a temporary
+single-node collection, the coordinator node may serve as the single
+destination for all intermediate pairs.</p>
+<h3 id="the-reduce-phase">The Reduce Phase</h3>
+<p>The reduce phase begins as nodes receive grouped intermediate
+values:</p>
+<ol type="1">
+<li><strong>Aggregation:</strong> The engine invokes the
+<code>reduce</code> function, which accepts a key and an array of values
+for that key, producing a single aggregated value.</li>
+<li><strong>Re-entrant Execution:</strong> In distributed systems, a
+reducer must be commutative and associative. Because values for a key
+may arrive in chunks from multiple shards, the engine may call the
+reduce function multiple times on subsets of values, passing previous
+reduced results back into the function alongside new intermediate
+values.</li>
+<li><strong>Finalize Function:</strong> If defined, a secondary
+<code>finalize</code> step runs after the final reduce pass on a key to
+perform modifications (such as calculating averages from emitted sums
+and counts) before outputting the record.</li>
+</ol>
+<h3 id="output-generation-and-coordination">Output Generation and
+Coordination</h3>
+<p>After all partitions have completed their reduce operations, the
+results are written based on the job configuration:</p>
+<ul>
+<li><strong>Inline Results:</strong> For small result sets, the reducer
+nodes stream aggregated documents back to the coordinator, which returns
+the complete array directly to the client memory.</li>
+<li><strong>Partitioned Target Collection:</strong> For large result
+sets, the reducers write the output directly into a new or existing
+collection on disk. If the target collection is itself partitioned,
+results are written directly to the appropriate shards without passing
+through a central bottleneck.</li>
+</ul>
+<p>Throughout this lifecycle, the coordinator node monitors heartbeats
+and task progress. If a node fails during the map or reduce phase, the
+coordinator can re-dispatch the failed task to another replica holding
+that shard's data, ensuring resilience across large distributed
+environments.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/map-reduce-on-partitioned-document-no-sql-databases';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

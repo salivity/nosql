@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Wide-Column NoSQL Skips Unneeded Column Families - nosql</title>
+    <meta name="description" content="Wide-column NoSQL databases optimize read performance by physically isolating data attributes, enabling the storage engine to bypass disk reads for columns that are not part of a query. This selective reading is achieved primarily through specialized file">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/how-wide-column-no-sql-skips-unneeded-column-families">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Wide-Column NoSQL Skips Unneeded Column Families - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/how-wide-column-no-sql-skips-unneeded-column-families" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Wide-column NoSQL databases optimize read performance by physically isolating data attributes, enabling the storage engine to bypass disk reads for columns that are not part of a query. This selective reading is achieved primarily through specialized file" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-wide-column-nosql-skips-unneeded-column-families">How
+Wide-Column NoSQL Skips Unneeded Column Families</h1>
+<p>Wide-column NoSQL databases optimize read performance by physically
+isolating data attributes, enabling the storage engine to bypass disk
+reads for columns that are not part of a query. This selective reading
+is achieved primarily through specialized file formats—most notably
+Sorted String Tables (SSTables) and HFiles—combined with physical data
+partitioning strategies such as Locality Groups. By organizing column
+families into independent storage units on disk, engines like Apache
+Cassandra, Apache HBase, and Google Bigtable eliminate unnecessary I/O
+and process read workloads efficiently.</p>
+<h3 id="physical-separation-via-sstables-and-hfiles">Physical Separation
+via SSTables and HFiles</h3>
+<p>The primary mechanism that allows wide-column engines to skip
+unneeded column families is physical storage segregation. Rather than
+storing every attribute of a row together in a single sequential record,
+wide-column engines split row data across distinct files based on column
+family definitions.</p>
+<ul>
+<li><strong>Apache HBase and the HFile Format:</strong> HBase maps each
+column family to a dedicated storage abstraction called a
+<code>Store</code>. Each <code>Store</code> writes its data to
+independent <strong>HFiles</strong> (HBase’s implementation of the
+SSTable). When a query requests columns belonging exclusively to
+<code>ColumnFamily_A</code>, the engine's query planner interacts only
+with the HFiles associated with that specific family. The storage engine
+never accesses or loads the HFiles containing
+<code>ColumnFamily_B</code> into memory, completely skipping unneeded
+data at the physical file system level.</li>
+<li><strong>Google Bigtable Locality Groups:</strong> In Google
+Bigtable, administrators can configure distinct column families into
+separate <strong>Locality Groups</strong>. Bigtable generates dedicated
+SSTables for each locality group. Querying a single locality group
+guarantees that the underlying SSTable readers stream only the blocks
+relevant to the requested columns.</li>
+<li><strong>Apache Cassandra SSTables:</strong> While modern Cassandra
+treats column families as distinct tables, each table is written to its
+own set of immutable SSTables. Within these SSTables, data is organized
+logically by partition key, but physical file boundaries ensure that
+scans targeted at specific data structures do not cross into adjacent
+datasets.</li>
+</ul>
+<h3
+id="block-level-skipping-with-internal-indexes-and-bloom-filters">Block-Level
+Skipping with Internal Indexes and Bloom Filters</h3>
+<p>Even within the specific storage format of a column family, secondary
+mechanisms allow engines to skip non-relevant data blocks within the
+file itself:</p>
+<ol type="1">
+<li><strong>Multi-Level Block Indexes:</strong> Both HFiles and SSTables
+divide data into fixed-size blocks (typically 64 KB). The file trailers
+contain block indexes storing the key ranges for each block. When
+seeking specific rows within a column family, the engine reads the index
+first, allowing it to jump directly to the target offset while skipping
+irrelevant data blocks.</li>
+<li><strong>Bloom Filters:</strong> Stored directly in the metadata
+section of HFiles and SSTables, Bloom filters allow the engine to
+determine whether a given row or column family exists within a
+particular file without accessing the actual data blocks, preventing
+unnecessary reads.</li>
+</ol>
+<h3 id="hybrid-columnar-alternatives-the-pax-model">Hybrid Columnar
+Alternatives: The PAX Model</h3>
+<p>Beyond traditional row-oriented SSTables, modern hybrid engines
+utilize variations of the <strong>PAX (Partition Attributes
+Across)</strong> storage model, as well as columnar formats like
+<strong>Apache Parquet</strong> or <strong>Apache ORC</strong>, to
+support wide-column workloads:</p>
+<ul>
+<li><strong>Column Chunk Segregation:</strong> In these formats, a
+logical row group is partitioned into separate column chunks. Each chunk
+contains values for a single column (or column family) across many
+rows.</li>
+<li><strong>Dictionary and Projection Pruning:</strong> Format metadata
+tracks the byte offsets of each column chunk. If a query does not
+reference a specific column family, the storage engine computes
+byte-range offsets that skip those column chunks entirely during
+sequential scans, achieving zero I/O overhead for unprojected
+attributes.</li>
+</ul></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/how-wide-column-no-sql-skips-unneeded-column-families';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

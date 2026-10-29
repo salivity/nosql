@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Indexing Dynamic Fields in NoSQL Documents - nosql</title>
+    <meta name="description" content="This article explores how NoSQL document-oriented databases index dynamic fields that cannot be predicted during design time. It outlines the foundational mechanisms modern document stores employ—such as wildcard indexing, inverted indexes, and structural">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/indexing-dynamic-fields-in-no-sql-documents">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Indexing Dynamic Fields in NoSQL Documents - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/indexing-dynamic-fields-in-no-sql-documents" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explores how NoSQL document-oriented databases index dynamic fields that cannot be predicted during design time. It outlines the foundational mechanisms modern document stores employ—such as wildcard indexing, inverted indexes, and structural" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="indexing-dynamic-fields-in-nosql-documents">Indexing Dynamic
+Fields in NoSQL Documents</h1>
+<p>This article explores how NoSQL document-oriented databases index
+dynamic fields that cannot be predicted during design time. It outlines
+the foundational mechanisms modern document stores employ—such as
+wildcard indexing, inverted indexes, and structural design patterns—to
+maintain high query performance across polymorphic and arbitrary JSON or
+BSON data without requiring strict schema definitions.</p>
+<h3 id="the-challenge-of-dynamic-fields">The Challenge of Dynamic
+Fields</h3>
+<p>Traditional relational databases depend on rigid, predefined schemas
+where each column is statically defined and indexed. Document databases
+(such as MongoDB, Couchbase, and Amazon DocumentDB) allow polymorphic
+schemas where different documents within the same collection can feature
+entirely unique fields, deeply nested objects, and arbitrary key-value
+pairs. Because database indexes (typically B-Tree or LSM-Tree variants)
+require a specific key path to extract and sort values, indexing
+unpredictable paths requires specialized indexing architectures.</p>
+<h3 id="wildcard-and-path-based-indexes">Wildcard and Path-Based
+Indexes</h3>
+<p>The most common native solution is wildcard indexing. Rather than
+targeting a fixed field (e.g., <code>user.profile.age</code>), a
+wildcard index targets an entire document sub-tree or the entire
+document using path syntax (such as <code>$**</code> in MongoDB).</p>
+<p>When a wildcard index is created, the database engine flattens every
+nested path into a discrete entry during the write operation. For every
+dynamic field encountered, the storage engine records a tuple
+containing:</p>
+<ul>
+<li>The full key path (e.g., <code>attributes.custom_size</code>)</li>
+<li>The field value (e.g., <code>42</code>)</li>
+<li>The document identifier (e.g., <code>_id</code>)</li>
+</ul>
+<p>When a query targets a dynamic path, the query planner matches the
+requested path against the indexed paths stored in the wildcard
+structure, avoiding a full collection scan.</p>
+<h3 id="inverted-indexes-and-dynamic-mapping">Inverted Indexes and
+Dynamic Mapping</h3>
+<p>Databases built on top of search-engine architectures, such as
+Elasticsearch or OpenSearch, use dynamic mapping combined with inverted
+indexes.</p>
+<p>When a document with an unknown field arrives:</p>
+<ol type="1">
+<li><strong>Dynamic Type Inference:</strong> The engine automatically
+inspects the data type (string, integer, boolean, or date).</li>
+<li><strong>Dynamic Mapping Update:</strong> The schema definition is
+updated on the fly in the cluster metadata.</li>
+<li><strong>Inverted Index Creation:</strong> The term and its location
+within the document are posted to an inverted index list.</li>
+</ol>
+<p>This approach ensures that every dynamic field becomes immediately
+searchable. However, it can lead to "mapping explosion," where thousands
+of distinct keys consume excessive memory, typically requiring systems
+to impose limits on the maximum number of indexed fields.</p>
+<h3 id="the-attribute-pattern">The Attribute Pattern</h3>
+<p>When native wildcard indexes are unavailable or incur excessive
+overhead, dynamic fields are managed at the application level via the
+<strong>Attribute Pattern</strong>. Instead of storing dynamic data as
+arbitrary top-level keys:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;product_id&quot;</span><span class="fu">:</span> <span class="dv">101</span><span class="fu">,</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;screen_size&quot;</span><span class="fu">:</span> <span class="st">&quot;15-inch&quot;</span><span class="fu">,</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;battery_life&quot;</span><span class="fu">:</span> <span class="st">&quot;10h&quot;</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
+<p>The document is restructured into a deterministic array of key-value
+pairs:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;product_id&quot;</span><span class="fu">:</span> <span class="dv">101</span><span class="fu">,</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;specs&quot;</span><span class="fu">:</span> <span class="ot">[</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">{</span> <span class="dt">&quot;k&quot;</span><span class="fu">:</span> <span class="st">&quot;screen_size&quot;</span><span class="fu">,</span> <span class="dt">&quot;v&quot;</span><span class="fu">:</span> <span class="st">&quot;15-inch&quot;</span> <span class="fu">}</span><span class="ot">,</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="fu">{</span> <span class="dt">&quot;k&quot;</span><span class="fu">:</span> <span class="st">&quot;battery_life&quot;</span><span class="fu">,</span> <span class="dt">&quot;v&quot;</span><span class="fu">:</span> <span class="st">&quot;10h&quot;</span> <span class="fu">}</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>  <span class="ot">]</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
+<p>By placing a single compound multikey index on <code>specs.k</code>
+and <code>specs.v</code>, the database indexes all present and future
+dynamic attributes. The engine treats <code>specs</code> as a fixed
+schema path, yet it dynamically accommodates any arbitrary attribute
+without index reconfiguration.</p>
+<h3 id="indexing-generalized-subdocuments">Indexing Generalized
+Subdocuments</h3>
+<p>Some systems allow semi-structured subdocuments to be stored as
+serialized JSON strings or binary dynamic blobs (e.g., PostgreSQL
+<code>jsonb</code> or Couchbase flexible JSON). These engines utilize
+Generalized Inverted Indexes (GIN) or hash indexes. The engine reads the
+raw JSON object, extracts all internal paths and terminal values, and
+builds an index containing path-value identifiers. Queries testing for
+path existence (<code>?</code>), key-value equality
+(<code>@&gt;</code>), or array membership can utilize this single index
+structure to locate documents quickly.</p>
+<h3 id="performance-and-trade-offs">Performance and Trade-Offs</h3>
+<p>Indexing dynamic fields introduces distinct engineering
+trade-offs:</p>
+<ul>
+<li><strong>Write Amplification:</strong> Writing a document with dozens
+of dynamic fields requires updating dozens of index entries within a
+wildcard or inverted index, slowing write operations.</li>
+<li><strong>Storage Footprint:</strong> Indexing dynamic paths often
+consumes significantly more storage than static B-tree indexes because
+the full attribute path string must be stored alongside the indexed
+values.</li>
+<li><strong>Query Optimization Limits:</strong> Query optimizers
+struggle with cardinality estimation on dynamic fields, which can
+sometimes lead to suboptimal execution plans compared to dedicated,
+single-field indexes.</li>
+</ul></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/indexing-dynamic-fields-in-no-sql-documents';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

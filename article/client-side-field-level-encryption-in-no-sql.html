@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Client-Side Field-Level Encryption in NoSQL - nosql</title>
+    <meta name="description" content="Client-side field-level encryption (CSFLE) in document NoSQL databases encrypts sensitive document fields within the application tier before data transmits across the network or reaches the database engine. This guide examines the mechanics of CSFLE, expl">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/client-side-field-level-encryption-in-no-sql">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Client-Side Field-Level Encryption in NoSQL - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/client-side-field-level-encryption-in-no-sql" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Client-side field-level encryption (CSFLE) in document NoSQL databases encrypts sensitive document fields within the application tier before data transmits across the network or reaches the database engine. This guide examines the mechanics of CSFLE, expl" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="client-side-field-level-encryption-in-nosql">Client-Side
+Field-Level Encryption in NoSQL</h1>
+<p>Client-side field-level encryption (CSFLE) in document NoSQL
+databases encrypts sensitive document fields within the application tier
+before data transmits across the network or reaches the database engine.
+This guide examines the mechanics of CSFLE, explaining envelope
+encryption, key management service (KMS) integration, query
+capabilities, and how these mechanisms satisfy rigorous compliance
+standards such as GDPR, HIPAA, and PCI-DSS.</p>
+<h3 id="the-architecture-of-client-side-field-level-encryption">The
+Architecture of Client-Side Field-Level Encryption</h3>
+<p>In a standard NoSQL deployment, encryption-at-rest protects storage
+media, but the database process itself still holds decrypted data in
+memory, exposing it to database administrators, memory-scraping malware,
+and compromised infrastructure. CSFLE eliminates this risk by moving
+cryptographic operations entirely to the client application.</p>
+<p>When an application performs a write operation, the database driver
+intercepts the document, inspects an encryption schema, encrypts only
+the designated fields, and replaces the plaintext values with encrypted
+binary payloads (ciphertext). The database engine stores and indexes the
+document without ever receiving the plaintext or the cryptographic keys.
+Upon reading, the client driver retrieves the document, requests the
+necessary keys, and decrypts the targeted fields locally.</p>
+<h3 id="envelope-encryption-and-key-management-integration">Envelope
+Encryption and Key Management Integration</h3>
+<p>Document NoSQL databases implement envelope encryption to balance
+performance and security:</p>
+<ol type="1">
+<li><strong>Customer Master Key (CMK):</strong> Hosted in an external
+Key Management Service (such as AWS KMS, Azure Key Vault, Google Cloud
+KMS, or HashiCorp Vault), this key never leaves the KMS hardware
+security module (HSM).</li>
+<li><strong>Data Encryption Keys (DEKs):</strong> Unique symmetric keys
+(typically AES-256-GCM) generated to encrypt the actual document fields.
+DEKs are encrypted using the CMK and stored in a dedicated key vault
+collection within the database itself.</li>
+</ol>
+<p>During runtime, the client driver retrieves the encrypted DEK from
+the database key vault, calls the external KMS to decrypt the DEK using
+the CMK, and caches the decrypted DEK locally in memory. The driver then
+uses this DEK to perform high-speed symmetric encryption and decryption
+on individual document fields.</p>
+<h3 id="deterministic-vs-randomized-encryption">Deterministic vs.
+Randomized Encryption</h3>
+<p>To maintain database utility, CSFLE implementations utilize two
+primary encryption algorithms:</p>
+<ul>
+<li><strong>Deterministic Encryption:</strong> Produces the same
+ciphertext for a given plaintext value and DEK. This allows applications
+to perform exact-match equality queries (e.g., querying by a specific
+Social Security Number or email address) because the client can encrypt
+the query parameter and match it against the stored ciphertext.</li>
+<li><strong>Randomized Encryption:</strong> Incorporates a distinct
+initialization vector (IV) for every write operation, ensuring that
+identical plaintext values produce different ciphertexts. While this
+prevents all querying against the field, it provides maximum
+cryptographic protection against frequency analysis attacks and is ideal
+for high-risk fields like medical notes or passwords.</li>
+</ul>
+<h3 id="satisfying-regulatory-compliance-rules">Satisfying Regulatory
+Compliance Rules</h3>
+<p>CSFLE directly addresses specific requirements defined by major
+regulatory frameworks:</p>
+<ul>
+<li><strong>Separation of Duties (PCI-DSS, HIPAA):</strong> Database
+administrators, cloud hosting providers, and storage operators have
+access only to encrypted fields. Without access to the external KMS,
+infrastructure staff cannot access protected health information (PHI) or
+cardholder data (CHD).</li>
+<li><strong>Crypto-Shredding and the "Right to be Forgotten"
+(GDPR):</strong> Under Article 17 of GDPR, organizations must delete
+user data upon request. In immutable append-only databases or
+distributed backups where physically deleting data is technically
+difficult, CSFLE enables cryptographic erasure. By deleting the specific
+DEK assigned to a specific user's documents, all associated personal
+data across backups and replicas instantly becomes permanently
+unrecoverable.</li>
+<li><strong>Data Breach Notification Safe Harbors:</strong> Regulations
+frequently waive mandatory breach notifications if the stolen data is
+demonstrably unreadable. Because data exfiltrated directly from the
+database disk or memory remains strongly encrypted without the KMS keys,
+it mitigates the legal liability associated with data loss.</li>
+</ul></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/client-side-field-level-encryption-in-no-sql';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

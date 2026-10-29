@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Range Scans in Wide-Column NoSQL Databases - nosql</title>
+    <meta name="description" content="Wide-column NoSQL databases like Apache Cassandra and ScyllaDB achieve high-performance range scans within a single partition by leveraging composite primary keys and physically sorted data structures. By isolating queries to a single partition key, the d">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/range-scans-in-wide-column-no-sql-databases">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Range Scans in Wide-Column NoSQL Databases - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/range-scans-in-wide-column-no-sql-databases" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Wide-column NoSQL databases like Apache Cassandra and ScyllaDB achieve high-performance range scans within a single partition by leveraging composite primary keys and physically sorted data structures. By isolating queries to a single partition key, the d" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="range-scans-in-wide-column-nosql-databases">Range Scans in
+Wide-Column NoSQL Databases</h1>
+<p>Wide-column NoSQL databases like Apache Cassandra and ScyllaDB
+achieve high-performance range scans within a single partition by
+leveraging composite primary keys and physically sorted data structures.
+By isolating queries to a single partition key, the database eliminates
+the need for expensive cross-node scatter-gather operations, routing the
+request directly to the specific replica nodes holding the data. Within
+that target partition, data is physically sorted on disk and in memory
+by designated clustering keys, allowing the storage engine to execute
+the range scan as a highly efficient, sequential read operation.</p>
+<h3 id="the-role-of-partition-and-clustering-keys">The Role of Partition
+and Clustering Keys</h3>
+<p>In wide-column architectures, the primary key consists of two
+elements: the partition key and the clustering key.</p>
+<ul>
+<li><strong>The Partition Key:</strong> Determines which node (or
+cluster of replica nodes) owns the data. The database hashes this key
+using a consistent hashing algorithm (such as Murmur3) to place the data
+into a specific token range.</li>
+<li><strong>The Clustering Key:</strong> Governs the internal layout and
+physical sort order of columns or rows within that designated
+partition.</li>
+</ul>
+<p>When a query specifies a single partition key along with an
+inequality or range condition on a clustering key (e.g.,
+<code>WHERE user_id = '123' AND timestamp &gt;= '2023-01-01' AND timestamp &lt;= '2023-01-31'</code>),
+the database immediately routes the query to the single node responsible
+for token <code>user_id = '123'</code>, avoiding distributed
+coordination.</p>
+<h3 id="data-layout-in-memory-and-on-disk">Data Layout in Memory and on
+Disk</h3>
+<p>To support efficient range scans, wide-column engines organize
+internal data into two primary structures:</p>
+<ol type="1">
+<li><strong>Memtables:</strong> In-memory, write-buffered structures
+typically implemented as concurrent skip lists or B-trees. Data within a
+Memtable is kept strictly sorted by partition key and then by clustering
+key.</li>
+<li><strong>SSTables (Sorted String Tables):</strong> Immutable disk
+files created when Memtables flush. Because data is already sorted in
+the Memtable, it is written to disk in sorted order. Inside each
+SSTable, the rows of a single partition are stored sequentially, ordered
+by the clustering keys.</li>
+</ol>
+<h3 id="the-execution-of-the-range-scan">The Execution of the Range
+Scan</h3>
+<p>Once a read request reaches the target storage node, the engine
+executes the range scan through the following steps:</p>
+<ol type="1">
+<li><strong>Partition Lookup:</strong> The node checks its Bloom
+filters, row keys, and partition summary indexes to identify which
+SSTables contain data for the target partition key.</li>
+<li><strong>Clustering Index Search:</strong> Within each relevant
+SSTable, the engine reads the partition's internal column/clustering
+index. Because clustering keys are sorted sequentially, the engine uses
+this index to jump directly to the offset corresponding to the start of
+the requested range (the lower bound), bypassing unrelated data.</li>
+<li><strong>Sequential Slice Reading:</strong> Starting from the
+computed offset, the engine performs a sequential disk read, scanning
+forward until it hits the upper bound of the requested range. Sequential
+reads maximize disk throughput and minimize disk head movement (or
+leverage SSD sequential block access).</li>
+<li><strong>Active Memory Scan:</strong> Concurrently, the engine
+performs the same bounded range search on the active Memtables, quickly
+traversing the skip list or B-tree between the lower and upper
+bounds.</li>
+<li><strong>Merge and Reconciliation:</strong> The engine pulls data
+slices from both the Memtables and all matching SSTables. It reconciles
+conflicting versions of rows using a multi-way merge (k-way merge
+algorithm) driven by cell timestamps. During this step, the engine
+filters out deleted rows marked with tombstones and resolves the most
+recent value for each cell.</li>
+<li><strong>Result Streaming:</strong> The sorted, merged result set is
+streamed back to the coordinator node and then to the client.</li>
+</ol>
+<h3 id="performance-impact">Performance Impact</h3>
+<p>Because the data inside a partition is pre-sorted by the clustering
+columns, range queries within a single partition avoid random I/O and do
+not require in-memory sorting operations at query time. The execution
+relies primarily on binary or indexed lookups followed by continuous
+sequential reads, making single-partition range scans one of the fastest
+query patterns available in wide-column storage systems.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/range-scans-in-wide-column-no-sql-databases';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wide-Column NoSQL Compaction Without Table Locks - nosql</title>
+    <meta name="description" content="Wide-column NoSQL databases like Apache Cassandra, ScyllaDB, and Apache HBase achieve lock-free background compaction by leveraging Log-Structured Merge-tree (LSM-tree) architectures and immutable data files. Instead of modifying existing data in place—wh">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/wide-column-no-sql-compaction-without-table-locks">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Wide-Column NoSQL Compaction Without Table Locks - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/wide-column-no-sql-compaction-without-table-locks" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Wide-column NoSQL databases like Apache Cassandra, ScyllaDB, and Apache HBase achieve lock-free background compaction by leveraging Log-Structured Merge-tree (LSM-tree) architectures and immutable data files. Instead of modifying existing data in place—wh" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="wide-column-nosql-compaction-without-table-locks">Wide-Column
+NoSQL Compaction Without Table Locks</h1>
+<p>Wide-column NoSQL databases like Apache Cassandra, ScyllaDB, and
+Apache HBase achieve lock-free background compaction by leveraging
+Log-Structured Merge-tree (LSM-tree) architectures and immutable data
+files. Instead of modifying existing data in place—which would require
+coarse-grained locking—these systems write merged and purged data into
+entirely new files while background threads handle file management. This
+ensures that client read and write operations continue uninterrupted
+with high throughput and low latency.</p>
+<h3 id="the-role-of-immutable-sstables">The Role of Immutable
+SSTables</h3>
+<p>The foundation of non-blocking compaction is immutability. In an
+LSM-tree-based engine, incoming writes are first appended to an on-disk
+commit log for durability and written to an in-memory buffer called a
+Memtable. Once the Memtable fills up, it flushes to disk as an immutable
+Sorted String Table (SSTable).</p>
+<p>Because SSTables are read-only and never modified in place, reads and
+background operations do not compete for file-level write locks. When
+updates or deletes occur, the database simply writes a newer timestamped
+version or a deletion marker known as a tombstone.</p>
+<h3 id="the-compaction-execution-flow">The Compaction Execution
+Flow</h3>
+<p>Automatic background compaction operates via dedicated background
+worker threads separate from client request coordinators. The process
+follows these steps:</p>
+<ol type="1">
+<li><strong>Selection:</strong> Compaction strategies (such as
+Size-Tiered, Leveled, or Time-Window) continuously monitor file metrics
+and select a candidate set of overlapping SSTables.</li>
+<li><strong>Merging and Purging:</strong> Background workers stream data
+concurrently from the candidate SSTables, performing a k-way merge sort.
+During this pass, the system keeps only the latest timestamped version
+of each cell, discards older overwritten variants, and removes expired
+tombstones.</li>
+<li><strong>Writing New SSTables:</strong> The consolidated data is
+streamed into brand new, temporary SSTables on disk. Existing SSTables
+remain completely untouched and active during this phase.</li>
+</ol>
+<h3 id="handling-reads-and-writes-concurrently">Handling Reads and
+Writes Concurrently</h3>
+<p>Client operations run concurrently with compaction without requiring
+table locks:</p>
+<ul>
+<li><strong>Writes:</strong> Client writes interact strictly with the
+in-memory Memtables and append-only commit logs. They never touch
+SSTables directly, making writes completely decoupled from
+compaction.</li>
+<li><strong>Reads:</strong> Read operations continue querying the active
+Memtables and the existing candidate SSTables. Even though those
+candidate SSTables are being read by compaction workers, multiple reader
+threads can scan immutable files simultaneously without contention.</li>
+</ul>
+<h3 id="atomic-metadata-swapping">Atomic Metadata Swapping</h3>
+<p>Once the new SSTables are fully written and synced to disk via
+<code>fsync</code>, the engine must replace the old files. It achieves
+this transition without locking via an atomic metadata swap.</p>
+<p>The database updates its internal file manifest (or in-memory file
+reference list) using atomic pointers. In a single atomic operation, the
+new SSTables are marked as active for new read queries, and the old
+candidate SSTables are marked for removal. Any in-flight read operations
+that were already scanning the old SSTables continue reading them safely
+via existing file descriptors. Once those active queries complete and
+reference counts drop to zero, background cleanup routines safely unlink
+and delete the old files from the filesystem.</p>
+<h3 id="resource-throttling-and-isolation">Resource Throttling and
+Isolation</h3>
+<p>To prevent background compaction from starving foreground reads and
+writes of disk I/O and CPU, wide-column engines implement strict
+throttling mechanisms. Compaction tasks are allocated configurable
+throughput limits (often measured in megabytes per second) and run on
+low-priority worker threads. Advanced engines like ScyllaDB use
+user-space scheduling and asynchronous I/O to dynamically balance
+compaction work against foreground request latency, ensuring the
+database remains responsive under heavy workloads.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/wide-column-no-sql-compaction-without-table-locks';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

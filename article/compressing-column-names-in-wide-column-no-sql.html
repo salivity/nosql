@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Compressing Column Names in Wide-Column NoSQL - nosql</title>
+    <meta name="description" content="Wide-column NoSQL databases store data in flexible, sparse formats where each cell historically contained a row key, column qualifier, timestamp, and value. While this architecture grants schema flexibility, writing identical column names across millions">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/compressing-column-names-in-wide-column-no-sql">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Compressing Column Names in Wide-Column NoSQL - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/compressing-column-names-in-wide-column-no-sql" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Wide-column NoSQL databases store data in flexible, sparse formats where each cell historically contained a row key, column qualifier, timestamp, and value. While this architecture grants schema flexibility, writing identical column names across millions" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="compressing-column-names-in-wide-column-nosql">Compressing
+Column Names in Wide-Column NoSQL</h1>
+<p>Wide-column NoSQL databases store data in flexible, sparse formats
+where each cell historically contained a row key, column qualifier,
+timestamp, and value. While this architecture grants schema flexibility,
+writing identical column names across millions of physical rows
+introduces massive storage overhead. This article explains the primary
+mechanisms wide-column systems—such as Apache Cassandra, Apache HBase,
+and Google Bigtable—use to eliminate and compress physical column name
+redundancy, ranging from schema-aware serialization to block-level
+compression.</p>
+<h2 id="schema-aware-row-layouts">Schema-Aware Row Layouts</h2>
+<p>Early iterations of wide-column engines, such as Cassandra 2.x,
+treated every row as a loose collection of cells, appending the full
+string name of the column to every single cell value. Modern engines
+have largely moved to schema-aware storage layouts.</p>
+<p>In modern Cassandra (versions 3.0 and later), the storage engine
+separates metadata from physical cell storage. The schema definition
+assigns small internal numerical identifiers (usually a 1- or 2-byte
+integer) to column names. When rows are serialized to disk, the database
+writes only these compact IDs or places values in a predefined
+positional order corresponding to the table's schema. This structural
+shift eliminates repeated string labels from physical rows entirely.</p>
+<h2 id="prefix-and-key-delta-encoding">Prefix and Key Delta
+Encoding</h2>
+<p>In systems based on Google Bigtable and Apache HBase, data is stored
+in sorted file formats like HFiles. Within these files, cells are stored
+as key-value pairs sorted lexicographically by row key, column family,
+column qualifier, and timestamp.</p>
+<p>Because contiguous cells frequently share identical row keys and
+column names, these systems use prefix compression (or delta
+encoding):</p>
+<ul>
+<li><strong>Prefix Encoding:</strong> The storage engine compares each
+cell key to the preceding key. Instead of repeating identical byte
+sequences, it stores the length of the matching prefix followed only by
+the suffix bytes that differ.</li>
+<li><strong>Diff Encoding (Fast Diff):</strong> Used in HBase, this
+technique tracks the row key, column family, column qualifier, and
+timestamp independently. If the column qualifier is identical to the
+previous cell, a single flag indicates a match, bypassing the qualifier
+bytes completely.</li>
+</ul>
+<h2 id="dictionary-encoding">Dictionary Encoding</h2>
+<p>For column qualifiers that vary across rows but draw from a bounded
+set of values, dictionary encoding replaces repetitive string names with
+compact integers. The database builds a dictionary mapping unique column
+names to short integer codes at the start of each file block or SSTable.
+The physical records then reference the dictionary key rather than
+embedding the full text string.</p>
+<h2 id="block-level-sliding-window-compression">Block-Level
+Sliding-Window Compression</h2>
+<p>Physical data files (SSTables or HFiles) are structured into discrete
+blocks, typically ranging from 4 KB to 64 KB in size. Before these
+blocks are flushed to disk, they pass through streaming, general-purpose
+compression algorithms such as LZ4, Snappy, or Zstandard.</p>
+<p>Because these algorithms rely on sliding-window byte matching (such
+as LZ77), any remaining column name redundancy within a single block is
+compressed automatically. If an identical column name appears multiple
+times within the block window, subsequent occurrences are replaced with
+small offset-length references pointing back to the first instance.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/compressing-column-names-in-wide-column-no-sql';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tuning Compaction Frequency in LSM-Tree Engines - nosql</title>
+    <meta name="description" content="Log-Structured Merge-tree (LSM-tree) NoSQL databases—such as RocksDB, Apache Cassandra, and ScyllaDB—rely on compaction to merge data files, purge tombstoned entries, and maintain fast read performance. Compaction frequency is controlled by a combination">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/tuning-compaction-frequency-in-lsm-tree-engines">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Tuning Compaction Frequency in LSM-Tree Engines - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/tuning-compaction-frequency-in-lsm-tree-engines" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Log-Structured Merge-tree (LSM-tree) NoSQL databases—such as RocksDB, Apache Cassandra, and ScyllaDB—rely on compaction to merge data files, purge tombstoned entries, and maintain fast read performance. Compaction frequency is controlled by a combination" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="tuning-compaction-frequency-in-lsm-tree-engines">Tuning
+Compaction Frequency in LSM-Tree Engines</h1>
+<p>Log-Structured Merge-tree (LSM-tree) NoSQL databases—such as RocksDB,
+Apache Cassandra, and ScyllaDB—rely on compaction to merge data files,
+purge tombstoned entries, and maintain fast read performance. Compaction
+frequency is controlled by a combination of memory-to-disk flush
+thresholds, per-level capacity limits, file count triggers, and
+background I/O allocations. This guide outlines the key engine
+parameters across both Leveled and Size-Tiered compaction strategies
+that directly dictate how often compaction runs.</p>
+<h3 id="1-memtable-and-flush-triggers">1. Memtable and Flush
+Triggers</h3>
+<p>Compaction cycles begin when in-memory writes are persisted to disk
+as immutable Sorted String Tables (SSTables). Adjusting how often memory
+flushes directly alters how often compaction is scheduled.</p>
+<ul>
+<li><strong>Write Buffer Size (<code>write_buffer_size</code> /
+<code>memtable_total_space_in_mb</code>):</strong> Sets the byte
+capacity of an individual in-memory memtable. Increasing this size
+allows the database to absorb more writes before flushing, reducing the
+frequency of initial SSTable creation and subsequent minor
+compactions.</li>
+<li><strong>Max Write Buffer Number
+(<code>max_write_buffer_number</code>):</strong> Determines how many
+memtables can remain in memory before a write stall occurs. A higher
+number allows bursts of writes to queue up, resulting in batched flushes
+rather than continuous, fragmented flushes.</li>
+</ul>
+<h3 id="2-leveled-compaction-parameters-lcs">2. Leveled Compaction
+Parameters (LCS)</h3>
+<p>In Leveled Compaction (common in RocksDB and LevelDB), data is
+divided into distinct levels (<span class="math inline">\(L_0, L_1, L_2,
+\dots\)</span>), with each level having a fixed capacity. Exceeding
+these capacities immediately triggers a compaction into the next
+level.</p>
+<ul>
+<li><strong>Level 0 Compaction Trigger
+(<code>level0_file_num_compaction_trigger</code>):</strong> Sets the
+exact number of unsorted SSTables allowed in Level 0 (<span
+class="math inline">\(L_0\)</span>) before an <span
+class="math inline">\(L_0 \to L_1\)</span> compaction is scheduled.
+Lowering this value makes compactions run more frequently to keep read
+latencies low, while increasing it reduces write amplification at the
+cost of read performance.</li>
+<li><strong>Base Level Target Size
+(<code>max_bytes_for_level_base</code>):</strong> Specifies the maximum
+aggregate size (in bytes) of Level 1. Once <span
+class="math inline">\(L_1\)</span> exceeds this value, a background
+compaction to <span class="math inline">\(L_2\)</span> is queued.</li>
+<li><strong>Level Size Multiplier
+(<code>max_bytes_for_level_multiplier</code>):</strong> Defines the
+growth factor for subsequent levels (typically <span
+class="math inline">\(10\times\)</span>). Level <span
+class="math inline">\(N+1\)</span> capacity is computed as <span
+class="math inline">\(\text{max\_bytes\_for\_level\_base} \times
+\text{multiplier}^N\)</span>. Changing this multiplier adjusts how often
+larger, deeper compactions are initiated.</li>
+<li><strong>Target File Size (<code>target_file_size_base</code> /
+<code>sstable_size_in_mb</code>):</strong> Dictates individual SSTable
+file sizes within each level. Smaller target sizes produce more files,
+leading to smaller, more frequent compactions, whereas larger files lead
+to less frequent, resource-intensive compactions.</li>
+</ul>
+<h3 id="3-size-tiered-compaction-parameters-stcs">3. Size-Tiered
+Compaction Parameters (STCS)</h3>
+<p>Size-Tiered Compaction (widely used in Apache Cassandra for
+write-heavy workloads) groups SSTables into tiers based on file size
+rather than explicit, sorted levels.</p>
+<ul>
+<li><strong>Minimum Threshold (<code>min_threshold</code>):</strong>
+Defines the minimum number of SSTables of comparable size that must
+exist in a single tier before a compaction job executes. Increasing this
+parameter postpones compaction until more files accumulate, decreasing
+compaction frequency.</li>
+<li><strong>Maximum Threshold (<code>max_threshold</code>):</strong>
+Caps the maximum number of SSTables merged in a single operation. If a
+large backlog builds, this setting breaks the work into multiple smaller
+compaction runs.</li>
+<li><strong>Bucket Low and Bucket High (<code>bucket_low</code> /
+<code>bucket_high</code>):</strong> Adjusts the percentage range used to
+group files of similar size into the same tier. Narrowing these
+boundaries limits which files qualify for a merge, delaying compaction
+runs until identical-sized files exist.</li>
+</ul>
+<h3 id="4-time-window-compaction-parameters-twcs">4. Time-Window
+Compaction Parameters (TWCS)</h3>
+<p>Time-Window Compaction is designed for append-only time-series data,
+grouping SSTables according to data timestamps.</p>
+<ul>
+<li><strong>Compaction Window Size
+(<code>compaction_window_size</code>):</strong> Defines the duration of
+time (e.g., 1 day, 4 hours) represented by a single window.</li>
+<li><strong>Compaction Window Unit
+(<code>compaction_window_unit</code>):</strong> The unit of measurement
+(hours, days) for the window. Compactions only occur frequently while a
+window is actively receiving writes; once a window expires, SSTables
+inside it are merged once and never compacted again unless explicitly
+prompted.</li>
+</ul>
+<h3 id="5-throughput-and-concurrency-controls">5. Throughput and
+Concurrency Controls</h3>
+<p>Even if file-count or size thresholds are crossed, engines throttle
+compaction execution to prevent I/O starvation.</p>
+<ul>
+<li><strong>Concurrent Compactors
+(<code>max_background_compactions</code> /
+<code>concurrent_compactors</code>):</strong> Allocates the number of
+worker threads dedicated to executing compaction routines
+simultaneously. Allocating fewer threads serializes compaction jobs,
+effectively slowing their overall frequency.</li>
+<li><strong>Compaction Throughput Cap
+(<code>rate_limiter_bytes_per_sec</code> /
+<code>compaction_throughput_mb_per_sec</code>):</strong> Restricts the
+disk write bandwidth available to compaction tasks. If compaction I/O
+reaches this ceiling, active compaction slows down and pending
+compactions are forced into a wait queue regardless of threshold
+breaches.</li>
+</ul></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/tuning-compaction-frequency-in-lsm-tree-engines';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

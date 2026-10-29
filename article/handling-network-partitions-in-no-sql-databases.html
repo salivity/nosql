@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Handling Network Partitions in NoSQL Databases - nosql</title>
+    <meta name="description" content="Network partitions occur when communication between nodes in a distributed database fails, creating isolated clusters that must handle read and write operations independently. This article explores the primary mechanisms NoSQL systems use to identify thes">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/handling-network-partitions-in-no-sql-databases">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Handling Network Partitions in NoSQL Databases - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/handling-network-partitions-in-no-sql-databases" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Network partitions occur when communication between nodes in a distributed database fails, creating isolated clusters that must handle read and write operations independently. This article explores the primary mechanisms NoSQL systems use to identify thes" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="handling-network-partitions-in-nosql-databases">Handling Network
+Partitions in NoSQL Databases</h1>
+<p>Network partitions occur when communication between nodes in a
+distributed database fails, creating isolated clusters that must handle
+read and write operations independently. This article explores the
+primary mechanisms NoSQL systems use to identify these connectivity
+failures and the recovery strategies they employ to reconcile diverging
+data once the network heals. By combining automated failure detection
+algorithms with replication and conflict-resolution models, NoSQL
+databases maintain availability and eventual consistency in accordance
+with the CAP theorem.</p>
+<h3 id="detecting-network-partitions">Detecting Network Partitions</h3>
+<p>NoSQL systems rely on decentralized and centralized protocols to
+continuously monitor node health and network reachability:</p>
+<ul>
+<li><strong>Heartbeats and Dynamic Timeouts:</strong> Nodes exchange
+periodic "ping" messages. Rather than relying on rigid timeout
+thresholds that might misinterpret network congestion as a failure,
+modern systems often use adaptive failure detectors, such as the Phi
+Accrual Failure Detector. This approach calculates a suspicion level
+based on historical heartbeat intervals to accurately detect failed or
+partitioned nodes.</li>
+<li><strong>Gossip Protocols:</strong> In decentralized systems like
+Apache Cassandra and Amazon DynamoDB, nodes continuously share cluster
+state information through peer-to-peer gossip. When a node stops
+responding or fails to update its state across multiple peers, the
+cluster reaches an eventual consensus that the node is unreachable due
+to a partition or crash.</li>
+<li><strong>Consensus Heartbeats:</strong> Strongly consistent (CP)
+systems like MongoDB or Google Cloud Spanner use leader-based consensus
+protocols (such as Raft or Paxos). The leader sends periodic heartbeats
+to maintain its lease; if a network partition isolates the leader from
+the majority of nodes, the majority group detects the missing heartbeats
+and initiates a new leader election.</li>
+</ul>
+<h3 id="preventing-data-inconsistency-during-partitions">Preventing Data
+Inconsistency During Partitions</h3>
+<p>Before recovery can take place, the database must limit inconsistent
+writes while partitioned:</p>
+<ul>
+<li><strong>Quorum Reads and Writes:</strong> Masterless databases use
+configurable quorums (<span class="math inline">\(R + W &gt; N\)</span>,
+where <span class="math inline">\(R\)</span> is read nodes, <span
+class="math inline">\(W\)</span> is write nodes, and <span
+class="math inline">\(N\)</span> is total replicas) to guarantee that
+reads reflect the latest writes. If a partition prevents a node from
+reaching a write quorum, the write is either rejected or flagged for
+asynchronous resolution.</li>
+<li><strong>Majority Fencing:</strong> In CP systems, the isolated
+minority side of a partition becomes read-only or ceases accepting
+traffic entirely. Fencing tokens and epoch numbers prevent a partitioned
+"stale" leader from accepting writes that conflict with the newly
+elected leader on the majority side.</li>
+</ul>
+<h3 id="recovering-from-network-partitions">Recovering from Network
+Partitions</h3>
+<p>Once the partition resolves and physical connectivity is restored,
+systems use specific reconciliation techniques to synchronize data:</p>
+<ul>
+<li><strong>Hinted Handoff:</strong> If a node was temporarily
+unreachable during a write operation, neighboring nodes store a "hint"
+locally. As soon as the partition heals and the missing node announces
+its return, the neighboring nodes stream the queued writes to the
+recovered node to bring it up to date.</li>
+<li><strong>Anti-Entropy with Merkle Trees:</strong> To reconcile data
+differences without transferring entire datasets, nodes exchange Merkle
+trees (hierarchical cryptographic hashes of key ranges). Nodes compare
+the roots of their trees; matching branches indicate identical data,
+while mismatched branches allow the system to quickly pinpoint and
+exchange only the missing or outdated rows.</li>
+<li><strong>Read Repair:</strong> When a client issues a read request,
+the coordinating node queries multiple replicas. If it detects divergent
+data versions among the responses, it serves the freshest data to the
+client and asynchronously writes the corrected data back to the
+out-of-date replicas.</li>
+<li><strong>Conflict Resolution Strategies:</strong> When concurrent
+writes occur on different sides of a partition, the system must decide
+which write wins:
+<ul>
+<li><em>Last-Write-Wins (LWW):</em> The system uses timestamps to keep
+the most recent update, though clock skew can lead to silent data
+loss.</li>
+<li><em>Vector Clocks and Version Vectors:</em> Causality tracking
+detects whether an update happened before another or if a true
+concurrent conflict occurred, allowing the application layer to resolve
+the divergence.</li>
+<li><em>Conflict-free Replicated Data Types (CRDTs):</em> Mathematical
+data structures designed to merge concurrently modified states
+deterministically without requiring coordination or central
+arbitration.</li>
+</ul></li>
+</ul></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/handling-network-partitions-in-no-sql-databases';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

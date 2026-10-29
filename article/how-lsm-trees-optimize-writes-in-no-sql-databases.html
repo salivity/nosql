@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How LSM-Trees Optimize Writes in NoSQL Databases - nosql</title>
+    <meta name="description" content="Log-Structured Merge-trees (LSM-trees) are a foundational data structure powering high-throughput write workloads in modern NoSQL databases like Apache Cassandra, ScyllaDB, and RocksDB. This article explores how LSM-trees optimize write performance by rep">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/how-lsm-trees-optimize-writes-in-no-sql-databases">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How LSM-Trees Optimize Writes in NoSQL Databases - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/how-lsm-trees-optimize-writes-in-no-sql-databases" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Log-Structured Merge-trees (LSM-trees) are a foundational data structure powering high-throughput write workloads in modern NoSQL databases like Apache Cassandra, ScyllaDB, and RocksDB. This article explores how LSM-trees optimize write performance by rep" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-lsm-trees-optimize-writes-in-nosql-databases">How LSM-Trees
+Optimize Writes in NoSQL Databases</h1>
+<p>Log-Structured Merge-trees (LSM-trees) are a foundational data
+structure powering high-throughput write workloads in modern NoSQL
+databases like Apache Cassandra, ScyllaDB, and RocksDB. This article
+explores how LSM-trees optimize write performance by replacing expensive
+random disk writes with fast sequential writes, detailing the roles of
+Write-Ahead Logs, in-memory MemTables, immutable Sorted String Tables
+(SSTables), and background compaction.</p>
+<h3 id="the-bottleneck-of-traditional-b-trees">The Bottleneck of
+Traditional B-Trees</h3>
+<p>Traditional relational databases commonly rely on B-trees or B+ trees
+to manage data. While B-trees excel at fast read operations, they
+require in-place updates. Modifying a record means locating its specific
+page on disk and rewriting it. Under write-heavy workloads, this results
+in continuous random disk input/output (I/O). Because random I/O
+requires high physical overhead—even on Solid State Drives (SSDs)—it
+drastically limits write throughput and causes high write
+amplification.</p>
+<h3 id="the-lsm-tree-write-path">The LSM-Tree Write Path</h3>
+<p>LSM-trees circumvent random disk access by decoupling the ingestion
+of data from its long-term organization on disk. When a write request
+arrives, it follows a multi-stage path designed to maximize sequential
+I/O:</p>
+<ol type="1">
+<li><strong>Write-Ahead Log (WAL):</strong> The write is immediately
+appended to an on-disk commit log. Because this write is strictly
+append-only, the disk performs a fast sequential write, ensuring data
+durability in the event of a sudden crash or power loss.</li>
+<li><strong>MemTable:</strong> Concurrently, the record is inserted into
+an in-memory buffer called the MemTable. The MemTable is typically
+implemented as a sorted data structure, such as a SkipList or Red-Black
+Tree. Once the data resides in the MemTable and the WAL, the database
+acknowledges the write as successful to the client. This entire process
+takes microseconds.</li>
+</ol>
+<h3 id="flushing-to-sstables">Flushing to SSTables</h3>
+<p>As write traffic continues, the MemTable eventually reaches its
+allocated memory limit. Instead of updating data in place on disk, the
+database performs the following actions:</p>
+<ul>
+<li>The active MemTable becomes immutable, and a new empty MemTable is
+allocated to continue receiving client writes without interruption.</li>
+<li>A background thread flushes the immutable MemTable to disk as a
+Sorted String Table (SSTable).</li>
+<li>Because the keys are already sorted in memory, the flush writes data
+to the disk in a single, continuous, sequential stream.</li>
+<li>SSTables are entirely immutable; once written to disk, they are
+never modified or rewritten in place. Deletions are handled by writing a
+marker called a "tombstone" rather than physically deleting data
+immediately.</li>
+</ul>
+<h3 id="background-compaction">Background Compaction</h3>
+<p>Because data is written out as multiple immutable SSTables over time,
+older SSTables can contain outdated versions of rows or deleted records
+marked with tombstones. LSM-trees resolve this through a continuous
+background process called compaction.</p>
+<p>Compaction merges multiple SSTables into a new, single SSTable using
+a merge-sort algorithm. During this process, the engine:</p>
+<ul>
+<li>Resolves duplicate keys by keeping only the most recent version
+based on timestamps.</li>
+<li>Purges records marked by tombstones.</li>
+<li>Removes obsolete SSTables from disk, reclaiming storage.</li>
+</ul>
+<p>Because compaction runs asynchronously in the background, it shields
+incoming write requests from the latency of reorganizing data.</p>
+<h3 id="why-lsm-trees-maximize-write-performance">Why LSM-Trees Maximize
+Write Performance</h3>
+<p>LSM-trees maximize write throughput through three primary design
+advantages:</p>
+<ul>
+<li><strong>Elimination of Random Writes:</strong> All client-facing
+writes occur either in memory (MemTable) or sequentially on disk (WAL
+and SSTable flushes), matching the physical strengths of modern storage
+hardware.</li>
+<li><strong>Deferred Work:</strong> Expensive tasks, such as
+deduplication and space reclamation, are pushed to background compaction
+routines rather than executed on the critical write path.</li>
+<li><strong>Lock-Free Concurrency:</strong> Because SSTables are
+immutable, incoming writes do not need to lock disk pages to prevent
+dirty reads or conflicts, drastically increasing concurrency.</li>
+</ul></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/how-lsm-trees-optimize-writes-in-no-sql-databases';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

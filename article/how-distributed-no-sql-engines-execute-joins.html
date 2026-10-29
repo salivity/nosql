@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Distributed NoSQL Engines Execute Joins - nosql</title>
+    <meta name="description" content="Distributed NoSQL databases traditionally favor denormalization to optimize for write throughput and horizontal scalability, but modern engines increasingly support joins across partition boundaries. Executing a join across partitions requires moving data">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/how-distributed-no-sql-engines-execute-joins">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Distributed NoSQL Engines Execute Joins - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/how-distributed-no-sql-engines-execute-joins" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Distributed NoSQL databases traditionally favor denormalization to optimize for write throughput and horizontal scalability, but modern engines increasingly support joins across partition boundaries. Executing a join across partitions requires moving data" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-distributed-nosql-engines-execute-joins">How Distributed
+NoSQL Engines Execute Joins</h1>
+<p>Distributed NoSQL databases traditionally favor denormalization to
+optimize for write throughput and horizontal scalability, but modern
+engines increasingly support joins across partition boundaries.
+Executing a join across partitions requires moving data over the network
+so that records with matching keys can be compared on the same physical
+machine. Distributed engines accomplish this through specific execution
+strategies, primarily broadcast joins, shuffle joins, colocated
+partition joins, and coordinator-driven scatter-gather operations.</p>
+<h3 id="the-challenge-of-cross-partition-data">The Challenge of
+Cross-Partition Data</h3>
+<p>In a distributed NoSQL architecture, data is split into partitions
+across independent nodes using hash-based or range-based partitioning
+keys. When two datasets must be joined on an attribute other than their
+shared partition key, related records typically reside on different
+physical servers. The engine cannot perform a local in-memory or disk
+comparison without first redistributing the data across the network,
+turning the join operation into a distributed data transfer problem
+governed by network bandwidth and latency.</p>
+<h3 id="broadcast-joins-replicated-joins">Broadcast Joins (Replicated
+Joins)</h3>
+<p>A broadcast join is deployed when one of the datasets involved in the
+join is significantly smaller than the other.</p>
+<ol type="1">
+<li>The distributed query coordinator identifies the smaller dataset
+(often after applying query filters).</li>
+<li>The entire small dataset is copied and transmitted across the
+network to every node hosting a partition of the larger dataset.</li>
+<li>Each node performs a standard local join between its local partition
+of the large dataset and the received copy of the small dataset.</li>
+</ol>
+<p>This method minimizes cross-network communication because only the
+smaller table is moved, completely avoiding the need to redistribute the
+larger dataset.</p>
+<h3 id="shuffle-joins-repartition-joins">Shuffle Joins (Repartition
+Joins)</h3>
+<p>When both datasets are too large to fit into memory or would cause
+excessive overhead if broadcast, the engine uses a distributed shuffle
+join:</p>
+<ol type="1">
+<li>Both datasets are scanned in parallel across all cluster nodes.</li>
+<li>Nodes apply a uniform hash function to the join key of each
+record.</li>
+<li>Records are streamed over the network to specific destination nodes
+corresponding to their join key hash.</li>
+<li>Because matching join keys produce identical hashes, records from
+both datasets with the same key are guaranteed to arrive at the same
+physical node.</li>
+<li>Once data transfer is complete, each destination node executes a
+local hash or merge join on the received subsets.</li>
+</ol>
+<p>While shuffle joins are resource-intensive due to heavy network I/O,
+serialization, and disk buffering, they scale horizontally for arbitrary
+data volumes.</p>
+<h3 id="colocated-joins-partition-wise-joins">Colocated Joins
+(Partition-Wise Joins)</h3>
+<p>Some distributed NoSQL engines bypass network transfers entirely
+through affinity partitioning or schema colocation. If two tables or
+document collections are explicitly configured to share the same
+partition key and partitioning strategy, records with the same key
+always live on the same physical shard. The engine pushes the join down
+directly to the local storage engine on each node, parallelizing the
+operation across the cluster with zero inter-node communication.</p>
+<h3 id="coordinator-driven-nested-loops">Coordinator-Driven Nested
+Loops</h3>
+<p>For queries targeting specific subsets via selective indexes,
+distributed engines frequently execute a distributed nested-loop join
+orchestrated by a query coordinator:</p>
+<ol type="1">
+<li>The coordinator queries the driving dataset using primary or
+secondary indexes to retrieve a small set of matching keys.</li>
+<li>The coordinator batches these keys and issues targeted parallel
+remote lookups (often via multi-get or batch-fetch APIs) to the specific
+storage nodes hosting the corresponding records of the target
+dataset.</li>
+<li>The coordinator receives the raw records and stitches the results
+together in memory before returning them to the client.</li>
+</ol>
+<p>This approach prevents massive data shuffling when queries contain
+highly selective filters, ensuring low-latency execution at the cost of
+coordinator CPU and memory utilization.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/how-distributed-no-sql-engines-execute-joins';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

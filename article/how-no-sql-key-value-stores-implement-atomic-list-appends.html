@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How NoSQL Key-Value Stores Implement Atomic List Appends - nosql</title>
+    <meta name="description" content="Atomic append operations on list data types in key-value NoSQL databases ensure that concurrent write requests safely add items to an array or list without race conditions or data loss. Implementing this capability requires the underlying database engine">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/how-no-sql-key-value-stores-implement-atomic-list-appends">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How NoSQL Key-Value Stores Implement Atomic List Appends - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/how-no-sql-key-value-stores-implement-atomic-list-appends" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Atomic append operations on list data types in key-value NoSQL databases ensure that concurrent write requests safely add items to an array or list without race conditions or data loss. Implementing this capability requires the underlying database engine" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-nosql-key-value-stores-implement-atomic-list-appends">How
+NoSQL Key-Value Stores Implement Atomic List Appends</h1>
+<p>Atomic append operations on list data types in key-value NoSQL
+databases ensure that concurrent write requests safely add items to an
+array or list without race conditions or data loss. Implementing this
+capability requires the underlying database engine to coordinate reads,
+modifications, and writes at the storage layer without locking the
+entire database. Depending on the distributed architecture and
+consistency model of the store, these atomic appends are typically
+realized through single-threaded execution loops, optimistic concurrency
+control, Conflict-Free Replicated Data Types (CRDTs), or distributed
+consensus mechanisms.</p>
+<h3 id="single-threaded-event-loops">Single-Threaded Event Loops</h3>
+<p>In-memory key-value databases such as Redis implement atomicity at
+the operational level by using a single-threaded execution core. Because
+all incoming client commands execute sequentially inside an event loop,
+operations like <code>RPUSH</code> or <code>LPUSH</code> run from start
+to finish without interruption from other threads.</p>
+<p>Internally, the engine locates the target key, references an
+underlying data structure (such as a dual-ended list or a memory-compact
+"quicklist"), and modifies the tail or head pointer to incorporate the
+new element. Because no two operations can access the dataset
+concurrently, the operation is inherently isolated and atomic with zero
+lock overhead.</p>
+<h3 id="read-modify-write-with-optimistic-concurrency">Read-Modify-Write
+with Optimistic Concurrency</h3>
+<p>Key-value systems designed for horizontal scaling, such as Amazon
+DynamoDB, implement atomic list appends using conditional writes and
+Optimistic Concurrency Control (OCC).</p>
+<p>When an append expression is submitted:</p>
+<ol type="1">
+<li>The partition node hosting the item reads the current state and
+version metadata (such as an internal version number or timestamp).</li>
+<li>The engine modifies the array by adding the new payload to the
+end.</li>
+<li>The engine attempts to write the updated object back to disk,
+asserting that the item's version has not changed since the initial
+read.</li>
+</ol>
+<p>If a concurrent process modified the record during this window, the
+conditional write fails, and the database automatically retries the
+operation or surfaces a transaction conflict for the client to
+handle.</p>
+<h3 id="conflict-free-replicated-data-types-crdts">Conflict-Free
+Replicated Data Types (CRDTs)</h3>
+<p>In masterless, multi-region NoSQL architectures such as Riak KV or
+Apache Cassandra, network latency makes global locking or immediate
+coordination impractical. These engines rely on State-based or
+Operation-based CRDTs to achieve atomic convergence.</p>
+<p>For list appends, systems implement Replicated Growable Arrays (RGA)
+or LWW-Element-Set structures. Each appended item is assigned a globally
+unique identifier comprising a client timestamp and a node ID. When
+nodes replicate changes, the data structure merges elements
+deterministically using mathematically defined lattice rules. Even if
+multiple nodes receive append requests simultaneously, the final
+ordering of the list converges identically across all replicas without
+requiring locks.</p>
+<h3 id="partition-level-locking-and-consensus-logging">Partition-Level
+Locking and Consensus Logging</h3>
+<p>Strongly consistent distributed stores, such as Google Cloud Spanner
+or etcd, use partition leases managed by consensus algorithms like Raft
+or Multi-Paxos.</p>
+<p>When an append request arrives:</p>
+<ol type="1">
+<li>The request routes to the designated leader node for the key’s
+partition.</li>
+<li>The leader acquires an in-memory, row-level mutex for the specified
+key to serialize competing updates.</li>
+<li>An append entry is added to the leader's write-ahead log (WAL).</li>
+<li>Once a quorum of follower nodes acknowledges the log entry, the
+leader applies the mutation to the storage engine (e.g., an LSM-tree)
+and releases the lock.</li>
+</ol>
+<p>By restricting locking to individual keys or partitions and routing
+all mutating traffic through a single consensus leader, the database
+guarantees safe atomic appends while maintaining high cluster-wide
+throughput.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/how-no-sql-key-value-stores-implement-atomic-list-appends';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

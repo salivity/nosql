@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Key-Value NoSQL Engines Handle OOM Errors - nosql</title>
+    <meta name="description" content="Key-value NoSQL engines maintain memory safety during out-of-memory (OOM) conditions by combining proactive resource tracking, defensive memory allocation, request admission control, and controlled data shedding. Rather than relying on the operating syste">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/how-key-value-no-sql-engines-handle-oom-errors">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Key-Value NoSQL Engines Handle OOM Errors - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/how-key-value-no-sql-engines-handle-oom-errors" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Key-value NoSQL engines maintain memory safety during out-of-memory (OOM) conditions by combining proactive resource tracking, defensive memory allocation, request admission control, and controlled data shedding. Rather than relying on the operating syste" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-key-value-nosql-engines-handle-oom-errors">How Key-Value
+NoSQL Engines Handle OOM Errors</h1>
+<p>Key-value NoSQL engines maintain memory safety during out-of-memory
+(OOM) conditions by combining proactive resource tracking, defensive
+memory allocation, request admission control, and controlled data
+shedding. Rather than relying on the operating system’s default memory
+management—which often terminates processes abruptly via the kernel OOM
+killer—these databases use embedded limits, custom allocators, and
+deterministic degradation strategies to prevent crashes, memory leaks,
+and state corruption.</p>
+<h3 id="custom-memory-allocators-and-precise-accounting">Custom Memory
+Allocators and Precise Accounting</h3>
+<p>Standard runtime allocators like <code>glibc malloc</code> often
+struggle with fragmentation and lack fine-grained introspection.
+Key-value stores such as Redis and RocksDB frequently integrate
+specialized allocators like <code>jemalloc</code> or
+<code>tcmalloc</code>.</p>
+<p>These allocators provide internal hooks to track total allocated
+bytes, active resident set size (RSS), and fragmentation metadata in
+real time. By continuously checking their active footprint against
+configured memory limits, engines detect memory exhaustion
+<em>before</em> an allocation request triggers an operating system panic
+or returns a null pointer that could cause a segmentation fault.</p>
+<h3 id="proactive-admission-control-and-error-propagation">Proactive
+Admission Control and Error Propagation</h3>
+<p>When memory crosses a predefined safety threshold, the storage engine
+switches to a defensive operating mode:</p>
+<ul>
+<li><strong>Write Rejection:</strong> The engine immediately stops
+accepting state-mutating requests (such as <code>SET</code>,
+<code>PUT</code>, or append operations) and returns clear
+application-level errors (for example, Redis's
+<code>OOM command not allowed</code>).</li>
+<li><strong>Read and Delete Availability:</strong> Read commands
+(<code>GET</code>) and removal operations (<code>DEL</code>) remain
+functional. This ensures clients can still retrieve critical data or
+explicitly delete keys to alleviate memory pressure.</li>
+<li><strong>Non-allocating Error Paths:</strong> Error paths are
+designed to avoid dynamic allocations entirely. If generating an error
+message requires allocating heap memory, the engine could crash;
+therefore, static pre-allocated error buffers are returned to the
+client.</li>
+</ul>
+<h3 id="automated-eviction-and-expiration">Automated Eviction and
+Expiration</h3>
+<p>To prevent reaching absolute capacity, key-value engines implement
+configurable eviction policies that execute synchronously or via
+low-priority background threads:</p>
+<ul>
+<li><strong>Volatile and All-Keys LRU/LFU:</strong> The engine removes
+the Least Recently Used (LRU) or Least Frequently Used (LFU) keys to
+reclaim memory.</li>
+<li><strong>TTL Sampling:</strong> Expired keys are identified and
+deleted either lazily (upon access) or actively via background sweeps to
+free chunks of dead memory.</li>
+<li><strong>Memory Defragmentation:</strong> When high fragmentation
+prevents contiguous allocations despite available logical memory, the
+engine incrementally reallocates data into continuous pages without
+blocking the primary execution loop.</li>
+</ul>
+<h3 id="disk-spilling-and-memtable-flushing">Disk-Spilling and MemTable
+Flushing</h3>
+<p>Log-structured merge-tree (LSM) engines like RocksDB or Pebble manage
+memory safety by offloading in-memory state to non-volatile storage:</p>
+<ul>
+<li><strong>Write Buffers (MemTables):</strong> Incoming writes are
+buffered in memory. When a buffer reaches its size threshold, it becomes
+read-only and a background thread flushes it to disk as an immutable
+SSTable file.</li>
+<li><strong>Write Stalls:</strong> If background flushing cannot keep up
+with high write throughput and memory approaches critical limits, the
+engine deliberately stalls or throttles incoming writes (backpressure)
+rather than allowing memory usage to climb indefinitely.</li>
+</ul>
+<h3 id="process-isolation-and-kernel-mitigation">Process Isolation and
+Kernel Mitigation</h3>
+<p>At the operating system level, production-grade key-value deployments
+adjust process priority using Linux's <code>oom_score_adj</code>. By
+assigning a lower score to the primary database process, administrators
+signal to the kernel that other ancillary processes should be terminated
+first during system-wide memory starvation.</p>
+<p>Simultaneously, the engine ensures that memory mappings (such as
+<code>mmap</code> references used for caching index blocks) are handled
+with bounds checking and system call validation to intercept
+<code>ENOMEM</code> codes cleanly, preserving process integrity and
+safeguarding persistent storage from partial writes.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/how-key-value-no-sql-engines-handle-oom-errors';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

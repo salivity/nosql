@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upgrading a NoSQL Schema Without Downtime - nosql</title>
+    <meta name="description" content="Upgrading a NoSQL cluster schema without downtime requires a phased, backward-compatible rollout strategy known as the Expand and Contract pattern. Because distributed NoSQL databases operate under high availability requirements across multiple applicatio">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/upgrading-a-no-sql-schema-without-downtime">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Upgrading a NoSQL Schema Without Downtime - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/upgrading-a-no-sql-schema-without-downtime" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Upgrading a NoSQL cluster schema without downtime requires a phased, backward-compatible rollout strategy known as the Expand and Contract pattern. Because distributed NoSQL databases operate under high availability requirements across multiple applicatio" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="upgrading-a-nosql-schema-without-downtime">Upgrading a NoSQL
+Schema Without Downtime</h1>
+<p>Upgrading a NoSQL cluster schema without downtime requires a phased,
+backward-compatible rollout strategy known as the Expand and Contract
+pattern. Because distributed NoSQL databases operate under high
+availability requirements across multiple application instances, direct
+in-place modifications can lead to read/write errors and data
+corruption. By decoupling application updates from data migration
+through dual-writing, asynchronous backfilling, and incremental traffic
+shifting, engineering teams can seamlessly evolve their data structures
+while maintaining continuous uptime.</p>
+<h3 id="step-1-design-for-backward-and-forward-compatibility">Step 1:
+Design for Backward and Forward Compatibility</h3>
+<p>Before changing any data, ensure that application code can handle
+missing fields, unexpected fields, and multiple data types
+simultaneously. Implement defensive coding patterns:</p>
+<ul>
+<li>Assign default values to new fields in the application layer.</li>
+<li>Avoid strict validation rules that crash the application when
+encountering new or deprecated attributes.</li>
+<li>Introduce an explicit <code>schema_version</code> attribute to
+documents to allow the application to route processing logic based on
+the record version.</li>
+</ul>
+<h3 id="step-2-implement-and-deploy-dual-writing">Step 2: Implement and
+Deploy Dual-Writing</h3>
+<p>Update the application layer to support the incoming schema change
+without altering how data is read:</p>
+<ul>
+<li><strong>Writes:</strong> The application writes data in both the old
+and new formats (or writes the new fields alongside the old fields
+within the same document).</li>
+<li><strong>Reads:</strong> The application continues reading
+exclusively from the old schema format.</li>
+<li>Deploy this change across all application instances. At this stage,
+all newly created or modified records will contain the new schema
+requirements, preventing any new "stale" data from entering the
+cluster.</li>
+</ul>
+<h3 id="step-3-backfill-historical-data-asynchronously">Step 3: Backfill
+Historical Data Asynchronously</h3>
+<p>With dual-writing active, migrate the historical records that were
+created prior to the update:</p>
+<ul>
+<li>Run a background worker or distributed batch job (such as a
+MapReduce task or queue-based consumer) to read records lacking the new
+schema fields and update them.</li>
+<li>Throttle the backfill process to prevent resource contention,
+ensuring that CPU, memory, and I/O limits on the NoSQL nodes do not
+impact live production traffic.</li>
+<li>Make the backfill idempotent, ensuring that rerunning the job on
+already-updated records produces no unintended side effects.</li>
+</ul>
+<h3 id="step-4-switch-read-operations-to-the-new-schema">Step 4: Switch
+Read Operations to the New Schema</h3>
+<p>Once verification queries confirm that historical records have been
+successfully backfilled:</p>
+<ul>
+<li>Update the application logic to read from the new schema
+format.</li>
+<li>Include a fallback mechanism: if an edge-case record is encountered
+where the new schema fields are missing, the application can temporarily
+fall back to the old schema structure.</li>
+<li>Deploy this update using a canary or rolling release to monitor
+application performance and error rates under live traffic.</li>
+</ul>
+<h3 id="step-5-stop-writing-to-the-old-schema">Step 5: Stop Writing to
+the Old Schema</h3>
+<p>After confirming that reads from the new schema are stable and
+error-free across the entire cluster:</p>
+<ul>
+<li>Modify the application code to eliminate the dual-writing
+logic.</li>
+<li>Configure writes to strictly use the new schema structure.</li>
+<li>Deploy this update across the cluster.</li>
+</ul>
+<h3 id="step-6-cleanup-and-deprecation">Step 6: Cleanup and
+Deprecation</h3>
+<p>The final step removes technical debt from both the database and the
+codebase:</p>
+<ul>
+<li>Remove deprecated fallback logic and legacy parsing code from the
+application repositories.</li>
+<li>If applicable, run a final asynchronous task to remove obsolete
+fields or drop old, unused secondary indexes that consume disk space and
+write throughput.</li>
+</ul></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/upgrading-a-no-sql-schema-without-downtime';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

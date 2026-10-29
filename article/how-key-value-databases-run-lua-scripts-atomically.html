@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Key-Value Databases Run Lua Scripts Atomically - nosql</title>
+    <meta name="description" content="Key-value NoSQL databases, such as Redis and Tarantool, utilize embedded Lua engines to execute complex transactions directly on the data layer without client-server network latency. This article examines the core architectural mechanisms that guarantee a">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/how-key-value-databases-run-lua-scripts-atomically">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Key-Value Databases Run Lua Scripts Atomically - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/how-key-value-databases-run-lua-scripts-atomically" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Key-value NoSQL databases, such as Redis and Tarantool, utilize embedded Lua engines to execute complex transactions directly on the data layer without client-server network latency. This article examines the core architectural mechanisms that guarantee a" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-key-value-databases-run-lua-scripts-atomically">How
+Key-Value Databases Run Lua Scripts Atomically</h1>
+<p>Key-value NoSQL databases, such as Redis and Tarantool, utilize
+embedded Lua engines to execute complex transactions directly on the
+data layer without client-server network latency. This article examines
+the core architectural mechanisms that guarantee atomicity during Lua
+script execution, focusing on single-threaded event processing,
+partition-level locking, embedded runtime integration, and write-ahead
+log replication strategies.</p>
+<h3 id="single-threaded-execution-loops">Single-Threaded Execution
+Loops</h3>
+<p>The most common design enabling atomic Lua execution—prominently
+utilized by Redis—is the single-threaded event loop. In this
+architecture, a single primary thread processes all client commands
+sequentially from an event queue.</p>
+<p>When a client issues a command to execute a Lua script (such as
+<code>EVAL</code> or <code>EVALSHA</code>), the database halts the
+ingestion of other incoming network requests and assigns the execution
+thread exclusively to the script. Because the database engine does not
+interleave instructions from other connections while the script is
+running, the operations inside the script are intrinsically isolated.
+The script sees a consistent snapshot of the data, and no other client
+can read or modify keys until the script completes entirely.</p>
+<h3 id="record-and-partition-locking-in-multi-threaded-engines">Record
+and Partition Locking in Multi-Threaded Engines</h3>
+<p>In multi-threaded or clustered key-value stores (such as Aerospike or
+Redis Cluster), single-threaded execution across the entire dataset is
+either not present or restricted to a single partition. In these
+architectures, atomicity is achieved through fine-grained concurrency
+control:</p>
+<ul>
+<li><strong>Hash-Slot and Partition Locking:</strong> In partitioned
+systems, scripts are typically restricted to operate only on keys mapped
+to the same hash slot. The server acquires an exclusive lock on that
+partition or slot before handing control to the Lua engine.</li>
+<li><strong>Two-Phase Locking (2PL) and Mutexes:</strong> Multi-threaded
+engines acquire exclusive write locks on all keys declared in the script
+parameters prior to evaluation. If a key is currently locked by another
+worker thread, the script waits or aborts, preventing dirty reads and
+race conditions.</li>
+</ul>
+<h3 id="in-process-embedded-lua-engine">In-Process Embedded Lua
+Engine</h3>
+<p>Key-value databases embed the C-based Lua interpreter directly inside
+the database process memory space rather than running it as an external
+sub-process. The database engine exposes internal C functions directly
+to the Lua state using the Lua C API.</p>
+<p>Because the data structures reside in the same memory space as the
+interpreter:</p>
+<ol type="1">
+<li>Data access occurs via direct pointer dereferencing rather than
+network serialization.</li>
+<li>The execution duration of the script is measured in
+microseconds.</li>
+<li>Lock hold times remain minimal, preventing prolonged server stalls
+while retaining absolute operational isolation.</li>
+</ol>
+<h3 id="transactional-atomicity-and-failure-handling">Transactional
+Atomicity and Failure Handling</h3>
+<p>Atomicity requires that a script either fully succeeds or produces no
+partial mutations if interrupted. Databases handle this requirement
+through different persistence and rollback strategies:</p>
+<ul>
+<li><strong>Script Pre-compilation and Validation:</strong> The database
+parses and compiles the script into bytecode before execution. Syntax
+errors are caught immediately, aborting the command before any write
+operations hit memory.</li>
+<li><strong>Write-Ahead Logging (WAL) and Replication:</strong> For
+persistence engines (such as Redis's Append-Only File), changes made by
+a Lua script are typically buffered during execution. Only upon
+successful completion is the transaction committed, written to the
+append-only log, and replicated to replicas as a single transactional
+block or an atomic sequence of standard commands.</li>
+<li><strong>Execution Timeouts without Partial Writes:</strong> To
+prevent infinite loops from locking the database indefinitely, engines
+provide execution timeouts (e.g., <code>busy-reply-threshold</code>). If
+a timeout occurs, the database does not allow concurrent clients to
+write arbitrary state; it only allows operational commands (like
+<code>SCRIPT KILL</code>) if the script has not yet issued a write
+command. If writes have occurred, the server must be terminated or
+failed over to prevent inconsistent state exposure.</li>
+</ul></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/how-key-value-databases-run-lua-scripts-atomically';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

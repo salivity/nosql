@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Atomic Updates in Distributed NoSQL Hash Rings - nosql</title>
+    <meta name="description" content="Key-value NoSQL databases achieve atomic updates across distributed hash rings by combining consistent hashing topologies with distributed consensus, replication protocols, and multi-version concurrency controls. This article examines the architectural me">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/atomic-updates-in-distributed-no-sql-hash-rings">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Atomic Updates in Distributed NoSQL Hash Rings - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/atomic-updates-in-distributed-no-sql-hash-rings" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Key-value NoSQL databases achieve atomic updates across distributed hash rings by combining consistent hashing topologies with distributed consensus, replication protocols, and multi-version concurrency controls. This article examines the architectural me" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="atomic-updates-in-distributed-nosql-hash-rings">Atomic Updates
+in Distributed NoSQL Hash Rings</h1>
+<p>Key-value NoSQL databases achieve atomic updates across distributed
+hash rings by combining consistent hashing topologies with distributed
+consensus, replication protocols, and multi-version concurrency
+controls. This article examines the architectural mechanisms used to
+guarantee atomic modifications—both for single-key updates localized to
+specific replica groups and complex multi-key updates that span multiple
+token ranges across the ring.</p>
+<h3 id="consistent-hashing-and-data-placement">Consistent Hashing and
+Data Placement</h3>
+<p>In a distributed key-value store, a consistent hash ring maps both
+cluster nodes and keys to an integer space (typically <span
+class="math inline">\(0\)</span> to <span
+class="math inline">\(2^{128}-1\)</span> or <span
+class="math inline">\(2^{64}-1\)</span>). A cryptographic hash function
+(such as MD5 or MurmurHash) hashes a key to determine its position on
+the ring. The key is assigned to the first node whose position is
+greater than or equal to the key's hash value, known as the primary
+coordinator or primary replica.</p>
+<p>To ensure fault tolerance, the database replicates each key across
+<span class="math inline">\(N\)</span> successive physical or virtual
+nodes along the ring. Because data is physically partitioned by token
+ranges, achieving atomicity requires coordinating these replicas so that
+an update either commits on all required nodes or leaves the cluster
+state unchanged.</p>
+<h3 id="single-key-atomicity-mechanisms">Single-Key Atomicity
+Mechanisms</h3>
+<p>Single-key updates affect only the specific replica set designated by
+the key's hash token. To ensure atomic single-key mutations, databases
+rely on the following strategies:</p>
+<h4 id="1-quorum-consensus-tunable-consistency">1. Quorum Consensus
+(Tunable Consistency)</h4>
+<p>Under the Dynamo model (used by systems like Apache Cassandra and
+Amazon DynamoDB), atomic writes use a quorum model defined by the
+formula:</p>
+<p><span class="math display">\[R + W &gt; N\]</span></p>
+<p>Where:</p>
+<ul>
+<li><span class="math inline">\(N\)</span> is the replication
+factor.</li>
+<li><span class="math inline">\(W\)</span> is the number of write
+replicas that must acknowledge the update.</li>
+<li><span class="math inline">\(R\)</span> is the number of read
+replicas queried.</li>
+</ul>
+<p>When a client initiates a write, the coordinator node broadcasts the
+mutation to all <span class="math inline">\(N\)</span> replicas on the
+ring. The operation is marked successful only if at least <span
+class="math inline">\(W\)</span> nodes atomically commit the change to
+their local write-ahead log (WAL) and memory tables (MemTables). This
+ensures that any subsequent read of <span
+class="math inline">\(R\)</span> nodes intersects with at least one node
+containing the latest atomic write.</p>
+<h4 id="2-partition-level-consensus-paxos-and-raft">2. Partition-Level
+Consensus (Paxos and Raft)</h4>
+<p>For linearizable, atomic compare-and-swap (CAS) operations—often
+referred to as Lightweight Transactions (LWT)—quorum consensus alone is
+insufficient because race conditions can occur between concurrent
+writes.</p>
+<p>Databases deploy consensus algorithms like Paxos or Raft scoped to
+the key's replica set:</p>
+<ul>
+<li><strong>Prepare/Promise:</strong> The coordinator asks the replica
+set for permission to propose an update with a specific proposal
+number.</li>
+<li><strong>Propose/Accept:</strong> If a quorum promises not to accept
+older proposals, the coordinator proposes the write payload.</li>
+<li><strong>Commit:</strong> Once a quorum accepts, the value is
+committed locally across the replicas, guaranteeing atomic state
+transitions without global locking.</li>
+</ul>
+<h3 id="cross-partition-and-multi-key-atomicity">Cross-Partition and
+Multi-Key Atomicity</h3>
+<p>When an update involves multiple keys mapped to different points on
+the hash ring, operations cannot be resolved within a single replica
+set. Databases apply distributed coordination protocols across multiple
+hash ring segments to preserve atomicity.</p>
+<h4 id="1-distributed-two-phase-commit-2pc-over-consensus">1.
+Distributed Two-Phase Commit (2PC) over Consensus</h4>
+<p>Modern distributed key-value stores combine Two-Phase Commit with
+partition-level consensus to eliminate single points of failure:</p>
+<ul>
+<li><strong>Phase 1 (Prepare):</strong> A transaction coordinator sends
+the write intent to each partition’s consensus group (Raft or Paxos
+group) across the ring. Each group replicates the "prepared" intent to
+its local quorum.</li>
+<li><strong>Phase 2 (Commit):</strong> Once all involved partitions
+confirm they have locked the records and replicated the prepare state,
+the coordinator writes a "commit" record to its own log and notifies
+each partition group to finalize the change.</li>
+</ul>
+<p>By running 2PC on top of consensus groups instead of bare nodes, the
+system prevents traditional 2PC coordinator-blocking issues.</p>
+<h4 id="2-multi-version-concurrency-control-mvcc-with-hybrid-clocks">2.
+Multi-Version Concurrency Control (MVCC) with Hybrid Clocks</h4>
+<p>To manage atomicity and isolation across the ring without heavy lock
+contention, databases use MVCC combined with Hybrid Logical Clocks
+(HLC).</p>
+<ul>
+<li>Each atomic update is assigned a monotonically increasing
+physical/logical timestamp.</li>
+<li>Writes create a new version of the key marked with this timestamp
+rather than overwriting existing data in-place.</li>
+<li>Reads query the ring using point-in-time snapshots, ensuring that
+in-flight distributed transactions do not expose partially written
+states.</li>
+</ul>
+<h4 id="3-optimistic-concurrency-control-occ-and-conflict-detection">3.
+Optimistic Concurrency Control (OCC) and Conflict Detection</h4>
+<p>Some systems process multi-key updates using OCC:</p>
+<ol type="1">
+<li><strong>Read Phase:</strong> The client reads the required keys and
+tracks their version numbers.</li>
+<li><strong>Validation Phase:</strong> The update request (containing
+read versions and proposed writes) is sent to the ring coordinators. The
+nodes verify that the versions have not changed.</li>
+<li><strong>Write Phase:</strong> If validation succeeds across all
+target keys on the ring, the changes are applied atomically; if any key
+has been modified by a concurrent transaction, the entire operation
+aborts and rolls back.</li>
+</ol>
+<h3 id="recovery-and-anti-entropy">Recovery and Anti-Entropy</h3>
+<p>If node or network failures occur during an atomic update across the
+hash ring, databases use recovery mechanisms to restore consistent
+state:</p>
+<ul>
+<li><strong>Write-Ahead Logging (WAL):</strong> Replicas write
+operations to disk-backed append-only logs before applying them to
+in-memory structures, ensuring local crash atomicity.</li>
+<li><strong>Hinted Handoff:</strong> If a replica node on the ring is
+temporarily unreachable during a write, the coordinator stores a "hint"
+locally and delivers the mutation as soon as the node re-joins the
+ring.</li>
+<li><strong>Merkle Tree Anti-Entropy:</strong> Background processes
+periodically compare cryptographic hash trees of data ranges between
+ring replicas to detect and repair diverged data without blocking
+incoming atomic writes.</li>
+</ul></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/atomic-updates-in-distributed-no-sql-hash-rings';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

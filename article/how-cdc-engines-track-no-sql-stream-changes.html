@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How CDC Engines Track NoSQL Stream Changes - nosql</title>
+    <meta name="description" content="Change Data Capture (CDC) engines track real-time modifications in NoSQL databases by tapping directly into internal transaction logs, parsing low-level data mutations, and publishing standardized change events to downstream systems. This article explains">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/how-cdc-engines-track-no-sql-stream-changes">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How CDC Engines Track NoSQL Stream Changes - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/how-cdc-engines-track-no-sql-stream-changes" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Change Data Capture (CDC) engines track real-time modifications in NoSQL databases by tapping directly into internal transaction logs, parsing low-level data mutations, and publishing standardized change events to downstream systems. This article explains" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-cdc-engines-track-nosql-stream-changes">How CDC Engines
+Track NoSQL Stream Changes</h1>
+<p>Change Data Capture (CDC) engines track real-time modifications in
+NoSQL databases by tapping directly into internal transaction logs,
+parsing low-level data mutations, and publishing standardized change
+events to downstream systems. This article explains the technical
+mechanics CDC tools use to identify inserts, updates, and deletes across
+distributed NoSQL architectures, manage streaming offsets, handle schema
+variations, and ensure low-latency data delivery without degrading
+primary database performance.</p>
+<h3 id="log-based-extraction">Log-Based Extraction</h3>
+<p>Rather than querying tables using timestamps or polling
+intervals—which introduces latency and system overhead—CDC engines
+primarily use log-based extraction. Distributed NoSQL databases persist
+writes to append-only sequential files before committing them to disk or
+applying them to memory tables:</p>
+<ul>
+<li><strong>MongoDB:</strong> Uses the Replica Set Oplog
+(<code>local.oplog.rs</code>), which records every operation that
+modifies data.</li>
+<li><strong>Apache Cassandra:</strong> Uses the CommitLog, often exposed
+to CDC via local directory listeners or micro-agents deployed on each
+node.</li>
+<li><strong>Amazon DynamoDB:</strong> Exposes DynamoDB Streams, which
+abstracts internal storage partition events into an ordered,
+time-stamped sequence.</li>
+</ul>
+<p>CDC engines hook into these append-only logs natively or via
+dedicated database connectors. Because reading an append-only log
+involves sequential disk reads or memory-mapped accesses, the CDC engine
+operates with near-zero overhead on the primary database cluster.</p>
+<h3 id="managing-distributed-partitions-and-checkpoints">Managing
+Distributed Partitions and Checkpoints</h3>
+<p>NoSQL databases distribute data across multiple shards, nodes, or
+partitions. A CDC engine must capture changes across all distributed
+instances while maintaining consistency.</p>
+<p>To do this, the CDC engine assigns individual stream readers to each
+database shard or partition. Each reader maintains an
+<strong>offset</strong> or <strong>checkpoint</strong>—a high-water mark
+indicating the last successfully processed Log Sequence Number (LSN) or
+timestamp. If a reader crashes or network latency occurs, the engine
+resumes processing from the last acknowledged checkpoint, preventing
+data loss and guaranteeing at-least-once delivery semantics.</p>
+<h3 id="event-reconstruction-and-transformation">Event Reconstruction
+and Transformation</h3>
+<p>Raw storage logs store mutations in database-specific binary or
+proprietary formats. CDC engines deserialize these low-level entries
+into structured event formats (such as JSON, Apache Avro, or Protocol
+Buffers).</p>
+<p>A typical processed CDC event contains:</p>
+<ul>
+<li><strong>Metadata:</strong> Database name, collection/keyspace,
+partition key, and execution timestamp.</li>
+<li><strong>Operation Type:</strong> Read, create, update, or delete
+(<code>c</code>, <code>u</code>, <code>d</code>, <code>r</code>).</li>
+<li><strong>Payload:</strong> The row or document state. Depending on
+the engine configuration, this includes the new state, the old state
+(before-image), or solely the modified attributes.</li>
+</ul>
+<h3 id="handling-schema-evolution-and-polymorphism">Handling Schema
+Evolution and Polymorphism</h3>
+<p>Unlike relational databases with rigid schemas, NoSQL engines
+frequently store schema-less or polymorphic documents. CDC frameworks
+like Debezium dynamically discover and propagate schema changes. When a
+document introduces new fields or alters existing types, the engine
+updates its internal schema registry, allowing downstream consumers
+(like Elasticsearch, Snowflake, or Apache Kafka) to ingest the mutations
+without pipeline breakage.</p>
+<h3 id="event-buffering-and-asynchronous-streaming">Event Buffering and
+Asynchronous Streaming</h3>
+<p>Once parsed, change events are emitted to distributed message
+brokers, such as Apache Kafka or Apache Pulsar. Buffering events in a
+message bus decouples the NoSQL source from analytical sinks, data
+warehouses, and cache invalidation services. This architecture ensures
+that sudden spikes in database write traffic do not overload downstream
+consumers, preserving real-time synchronization across the entire data
+platform.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/how-cdc-engines-track-no-sql-stream-changes';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>
