@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Time-Series NoSQL Database Compression Explained - nosql</title>
+    <meta name="description" content="Time-series NoSQL databases process massive volumes of sequential data that arrive at regular intervals and often fluctuate within narrow numeric bands. To prevent runaway storage costs and maintain fast query execution, these databases bypass general-pur">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/time-series-no-sql-database-compression-explained">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Time-Series NoSQL Database Compression Explained - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/time-series-no-sql-database-compression-explained" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Time-series NoSQL databases process massive volumes of sequential data that arrive at regular intervals and often fluctuate within narrow numeric bands. To prevent runaway storage costs and maintain fast query execution, these databases bypass general-pur" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="time-series-nosql-database-compression-explained">Time-Series
+NoSQL Database Compression Explained</h1>
+<p>Time-series NoSQL databases process massive volumes of sequential
+data that arrive at regular intervals and often fluctuate within narrow
+numeric bands. To prevent runaway storage costs and maintain fast query
+execution, these databases bypass general-purpose compression algorithms
+in favor of specialized, lightweight encoding techniques. By combining
+Delta-of-Delta encoding for predictable timestamps with XOR-based
+floating-point compression and run-length encoding for metrics,
+time-series engines systematically strip out redundancy at the bit level
+before archiving data to disk.</p>
+<h3 id="compressing-repetitive-timestamps">Compressing Repetitive
+Timestamps</h3>
+<p>Timestamps are 64-bit Unix epoch values that, without compression,
+consume vast amounts of memory. However, time-series data is typically
+collected at steady cadences, such as once every second, minute, or
+hour. Databases leverage this predictability using two primary
+mathematical transformations:</p>
+<ul>
+<li><strong>Delta Encoding:</strong> Instead of saving an absolute
+timestamp (e.g., <code>1710000000</code>, <code>1710000060</code>,
+<code>1710000120</code>), the engine computes the difference between
+consecutive values. If metrics are polled once per minute, the stored
+sequence becomes relative increments (<code>60</code>, <code>60</code>,
+<code>60</code>), which drastically reduces the integer magnitudes.</li>
+<li><strong>Delta-of-Delta Encoding:</strong> Standardized by Facebook’s
+Gorilla time-series architecture, this technique calculates the
+difference between consecutive deltas (<span class="math inline">\(D_n =
+(t_n - t_{n-1}) - (t_{n-1} - t_{n-2})\)</span>). When measurements occur
+at perfectly regular intervals, the delta-of-delta is zero. The database
+can represent a zero value using a single binary bit (<code>0</code>).
+When network latency or clock skew causes jitter, the system outputs a
+non-zero marker followed by variable-length bit-packing to record only
+the magnitude of the drift.</li>
+</ul>
+<h3 id="compressing-metric-values">Compressing Metric Values</h3>
+<p>Metrics present different patterns than timestamps, alternating
+between completely static measurements, gradual variations, and sudden
+spikes. Specialized algorithms target these specific behaviors depending
+on whether the data is floating-point or integer-based.</p>
+<ul>
+<li><strong>XOR Floating-Point Compression:</strong> Standard IEEE 754
+floating-point numbers often share identical exponent and mantissa bits
+when consecutive measurements deviate only slightly. The engine compares
+the current floating-point value to the preceding one using a bitwise
+XOR operation. If the values are identical, the result is zero, which is
+stored as a single bit. If they vary, the system records only the
+non-zero "meaningful bits," discarding redundant leading and trailing
+zeros.</li>
+<li><strong>Run-Length Encoding (RLE):</strong> Ideal for operational
+statuses, discrete state flags, or counters that remain static for long
+periods. Instead of storing repeated entries individually (e.g.,
+<code>[Online, Online, Online, Online]</code>), RLE stores the distinct
+value paired with a frequency count (e.g.,
+<code>Online x 4</code>).</li>
+<li><strong>Frame-of-Reference (FoR) and Bit-Packing:</strong> Used
+primarily for integer measurements. The engine identifies the minimum
+value in a given block as the "frame of reference" and stores subsequent
+numbers as small offsets relative to that baseline. The engine then
+calculates the maximum bit width needed to store the largest offset in
+the block and packs the values tightly, shedding the unused high-order
+bits typically reserved by 32-bit or 64-bit systems.</li>
+</ul>
+<h3 id="columnar-layout-and-secondary-compression">Columnar Layout and
+Secondary Compression</h3>
+<p>To maximize the efficiency of these algorithms, time-series databases
+organize records into columnar blocks rather than traditional
+row-oriented tuples. Timestamps are grouped together in one continuous
+array, while metric values are isolated in another. This guarantees that
+similar data types and patterns are processed adjacent to one
+another.</p>
+<p>Once the specialized algorithms (Delta-of-Delta, XOR, RLE) reduce the
+raw data into tight bit streams, the database frequently applies a
+secondary, general-purpose byte-level compression pass—such as Zstandard
+(zstd) or Snappy. Because the underlying data has already been
+linearized and stripped of entropy, this secondary pass achieves high
+compression ratios with minimal CPU overhead.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/time-series-no-sql-database-compression-explained';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

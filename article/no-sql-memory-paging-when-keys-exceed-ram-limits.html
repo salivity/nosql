@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NoSQL Memory Paging: When Keys Exceed RAM Limits - nosql</title>
+    <meta name="description" content="This article examines how key-value NoSQL databases handle memory paging and data retrieval when the cumulative volume of keys surpasses physical RAM capacity. When keys no longer fit in memory, databases must abandon all-in-memory index designs and inste">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/no-sql-memory-paging-when-keys-exceed-ram-limits">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="NoSQL Memory Paging: When Keys Exceed RAM Limits - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/no-sql-memory-paging-when-keys-exceed-ram-limits" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article examines how key-value NoSQL databases handle memory paging and data retrieval when the cumulative volume of keys surpasses physical RAM capacity. When keys no longer fit in memory, databases must abandon all-in-memory index designs and inste" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="nosql-memory-paging-when-keys-exceed-ram-limits">NoSQL Memory
+Paging: When Keys Exceed RAM Limits</h1>
+<p>This article examines how key-value NoSQL databases handle memory
+paging and data retrieval when the cumulative volume of keys surpasses
+physical RAM capacity. When keys no longer fit in memory, databases must
+abandon all-in-memory index designs and instead adopt hybrid storage
+architectures. The following sections explore the mechanisms engines use
+to page, cache, and navigate large key spaces, including Log-Structured
+Merge-tree (LSM) sparse indexes, block-level caching, operating system
+paging abstractions, and prefix compression.</p>
+<h3 id="the-problem-of-massive-key-spaces">The Problem of Massive Key
+Spaces</h3>
+<p>In basic key-value designs, engines keep a full hash map of all keys
+in RAM to achieve <span class="math inline">\(O(1)\)</span> lookups,
+directing disk heads only to fetch the corresponding payload values.
+When the aggregate size of the keys themselves exceeds the system’s
+physical memory, this architecture fails. The database cannot store
+every key in an active memory table without triggering operating system
+out-of-memory (OOM) errors or heavy swap thrashing. To operate within
+strict RAM limits, the storage engine must treat keys as secondary
+storage citizens, keeping only a fraction of key metadata in active
+memory and paging the rest from disk on demand.</p>
+<h3 id="lsm-trees-and-sparse-key-indexing">LSM-Trees and Sparse Key
+Indexing</h3>
+<p>Engines utilizing Log-Structured Merge-trees (LSM-trees)—such as
+RocksDB and Apache Cassandra—solve the memory constraint by organizing
+data sequentially into Immutable Sorted String Tables (SSTables) on
+disk. Rather than indexing every key in RAM, LSM-trees apply sparse
+indexing:</p>
+<ol type="1">
+<li><strong>SSTable Block Partitioning:</strong> Data (keys and values)
+is sorted and divided into fixed-size disk blocks (typically 4 KB to 64
+KB).</li>
+<li><strong>Sparse In-Memory Index:</strong> Only the first (or last)
+key of each block is stored in an in-memory index, acting as a boundary
+marker.</li>
+<li><strong>Paging via Block Caches:</strong> When a query targets a
+key, the database consults the sparse index to identify the specific
+block containing that key range. The engine reads that specific block
+from storage into a user-space LRU/2Q block cache.</li>
+</ol>
+<p>Because the RAM footprint is reduced to just one index entry per
+block rather than one per key, key storage overhead in memory drops by
+orders of magnitude. Keys that are not actively queried remain paged out
+on disk.</p>
+<h3 id="b-tree-derivatives-and-buffer-pool-paging">B-Tree Derivatives
+and Buffer Pool Paging</h3>
+<p>Engines based on B-Trees or B+ Trees (such as MongoDB's WiredTiger or
+Couchbase's ForestDB) structure both keys and values into tree nodes,
+where internal nodes store search keys and leaf nodes store the target
+records.</p>
+<ul>
+<li><strong>Buffer Pools:</strong> The engine allocates a dedicated
+memory buffer pool that holds a subset of these tree nodes.</li>
+<li><strong>On-Demand Node Paging:</strong> If a lookup traversal hits a
+child node that is not present in the buffer pool, the engine initiates
+a synchronous I/O read to fetch the 4 KB or 8 KB page from disk.</li>
+<li><strong>Eviction Policies:</strong> When the buffer pool fills up,
+eviction algorithms like Least Recently Used (LRU) or Clock Sweep write
+modified (dirty) pages back to disk and evict clean pages to free memory
+for incoming key pages.</li>
+</ul>
+<p>By handling the index as a set of fixed-size disk pages rather than a
+continuous memory array, B-tree implementations ensure that index depth
+increases while the working memory footprint remains bounded.</p>
+<h3 id="memory-mapped-files-mmap">Memory-Mapped Files (mmap)</h3>
+<p>Some key-value engines, such as LMDB, offload paging mechanics
+entirely to the operating system kernel using the <code>mmap</code>
+system call. The entire database file—containing keys, pointers, and
+data—is mapped into the process's 64-bit virtual address space.</p>
+<p>When the application accesses a virtual address referencing a key
+that is not in physical RAM, the CPU triggers a page fault. The
+operating system kernel intercepts this fault, retrieves the
+corresponding 4 KB page from disk into the OS page cache, updates the
+page tables, and resumes execution. When memory pressure rises, the OS
+kernel's virtual memory manager automatically pages out inactive
+key-bearing pages. While this simplifies the database engine, it
+provides less deterministic control over read-ahead and eviction
+strategies compared to dedicated user-space buffer managers.</p>
+<h3 id="minimizing-in-memory-footprints">Minimizing In-Memory
+Footprints</h3>
+<p>To reduce how frequently keys must be fetched from disk, modern
+engines use key compression and probabilistic filters:</p>
+<ul>
+<li><strong>Prefix and Delta Encoding:</strong> Within SSTable data
+blocks and B-Tree pages, keys are sorted alphabetically. Engines store
+only the shared prefix length and suffix difference relative to the
+preceding key, drastically reducing the disk and cache footprints of
+long keys.</li>
+<li><strong>Bloom Filters:</strong> To avoid paging in entire key blocks
+from disk during lookup misses, engines generate compact, in-memory
+Bloom filters for each SSTable. If the filter indicates a key is absent,
+the engine avoids reading that block from storage entirely, conserving
+both memory bandwidth and I/O cycles.</li>
+</ul></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/no-sql-memory-paging-when-keys-exceed-ram-limits';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

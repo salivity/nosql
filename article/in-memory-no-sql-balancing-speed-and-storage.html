@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>In-Memory NoSQL: Balancing Speed and Storage - nosql</title>
+    <meta name="description" content="Memory-centric NoSQL databases like Redis achieve microsecond latency by executing reads and writes directly in volatile RAM, bypassing the physical bottlenecks of traditional disk storage. Because RAM loses all data upon power loss or crashes, these data">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/in-memory-no-sql-balancing-speed-and-storage">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="In-Memory NoSQL: Balancing Speed and Storage - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/in-memory-no-sql-balancing-speed-and-storage" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Memory-centric NoSQL databases like Redis achieve microsecond latency by executing reads and writes directly in volatile RAM, bypassing the physical bottlenecks of traditional disk storage. Because RAM loses all data upon power loss or crashes, these data" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="in-memory-nosql-balancing-speed-and-storage">In-Memory NoSQL:
+Balancing Speed and Storage</h1>
+<p>Memory-centric NoSQL databases like Redis achieve microsecond latency
+by executing reads and writes directly in volatile RAM, bypassing the
+physical bottlenecks of traditional disk storage. Because RAM loses all
+data upon power loss or crashes, these databases must employ specialized
+persistence architectures to survive hardware failures. By combining
+background snapshots, append-only logs, configurable write buffers, and
+memory-to-memory replication, in-memory systems decouple real-time
+execution from disk I/O to achieve durability without degrading
+operational performance.</p>
+<h3 id="decoupling-execution-from-disk-io">Decoupling Execution from
+Disk I/O</h3>
+<p>In traditional relational systems, writes typically wait for a
+confirmation that data has been flushed to non-volatile disk blocks.
+Memory-centric databases reverse this priority. By default, incoming
+write commands modify the in-memory data structures immediately and
+return an acknowledgment to the client. Disk persistence is handled off
+the critical path, either asynchronously via background processes or via
+batched, sequential operations that do not stall the primary memory
+engine.</p>
+<h3 id="point-in-time-snapshots-rdb">Point-in-Time Snapshots (RDB)</h3>
+<p>Point-in-time snapshotting creates a compact, point-in-time image of
+the entire dataset on disk at predefined intervals (e.g., every five
+minutes or after a set number of write operations).</p>
+<p>To prevent freezing the database while dumping gigabytes of data to
+disk, engines utilize the operating system’s <code>fork()</code> system
+call. This creates a child process with a shared memory space through
+Copy-on-Write (CoW). The parent process continues serving client
+requests without interruption, while the child writes the memory state
+to an immutable snapshot file. The primary trade-off is durability: any
+writes that occur between snapshots are lost if the server fails
+abruptly.</p>
+<h3 id="append-only-logs-aof">Append-Only Logs (AOF)</h3>
+<p>To minimize the data-loss window inherent to periodic snapshots,
+memory databases use append-only logging. Every command that alters data
+is written to an event log sequentially on disk.</p>
+<p>Because sequential disk writes are significantly faster than random
+writes, append-only logging retains high throughput. To balance safety
+and latency, databases allow users to configure the disk synchronization
+policy:</p>
+<ul>
+<li><strong>Always (Fsync on every write):</strong> Maximum durability,
+but throughput drops significantly to match disk speeds.</li>
+<li><strong>Every Second:</strong> A widely used compromise that flushes
+the write buffer to disk once per second, limiting potential data loss
+to a single second of traffic while maintaining high memory speeds.</li>
+<li><strong>Never:</strong> The database delegates disk flushing
+entirely to the operating system's cache management, prioritizing raw
+performance.</li>
+</ul>
+<p>Over time, write logs grow excessively large. Engines automatically
+rewrite the log in the background by compiling the minimal set of
+commands required to recreate the current dataset, preventing storage
+exhaustion.</p>
+<h3 id="hybrid-persistence-models">Hybrid Persistence Models</h3>
+<p>Modern implementations often merge snapshotting and logging into a
+hybrid approach. The database periodically writes a compact, binary
+snapshot as a base state, and then tracks subsequent modifications using
+a lightweight append-only log.</p>
+<p>Upon a system reboot, the database rapidly loads the dense binary
+snapshot into RAM and then replays only the short delta of appended
+write commands. This eliminates long recovery times associated with
+replaying massive transaction logs while preserving low recovery point
+objectives (RPO).</p>
+<h3 id="in-memory-replication-as-a-durability-layer">In-Memory
+Replication as a Durability Layer</h3>
+<p>Physical disk persistence is not the only mechanism used to protect
+data. In distributed architectures, memory-centric databases replicate
+memory states across multiple server nodes asynchronously or
+semi-synchronously.</p>
+<p>If a primary node suffers hardware failure, a replica holding the
+exact in-memory state is promoted instantly via automated failover. By
+distributing the dataset across separate physical machines, the cluster
+maintains durability and high availability at memory bus speeds,
+treating disk persistence as a secondary disaster-recovery layer rather
+than the primary mechanism for fault tolerance.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/in-memory-no-sql-balancing-speed-and-storage';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

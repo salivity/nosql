@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Why Telcos Use Wide-Column NoSQL for CDRs - nosql</title>
+    <meta name="description" content="Telecommunications providers generate billions of Call Detail Records (CDRs) every day, capturing critical metadata for voice calls, text messages, and data usage. To manage this massive influx of time-stamped events, telecom companies rely heavily on wid">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/why-telcos-use-wide-column-no-sql-for-cd-rs">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Why Telcos Use Wide-Column NoSQL for CDRs - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/why-telcos-use-wide-column-no-sql-for-cd-rs" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Telecommunications providers generate billions of Call Detail Records (CDRs) every day, capturing critical metadata for voice calls, text messages, and data usage. To manage this massive influx of time-stamped events, telecom companies rely heavily on wid" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="why-telcos-use-wide-column-nosql-for-cdrs">Why Telcos Use
+Wide-Column NoSQL for CDRs</h1>
+<p>Telecommunications providers generate billions of Call Detail Records
+(CDRs) every day, capturing critical metadata for voice calls, text
+messages, and data usage. To manage this massive influx of time-stamped
+events, telecom companies rely heavily on wide-column NoSQL databases
+like Apache Cassandra and ScyllaDB. This article explains how
+wide-column stores provide the massive write throughput, dynamic schema
+flexibility, horizontal scalability, and continuous availability
+required to ingest, store, and analyze petabyte-scale CDR data for
+billing, customer service, and fraud detection.</p>
+<h3 id="unmatched-write-throughput">Unmatched Write Throughput</h3>
+<p>Every network interaction—initiating a phone call, ending a data
+session, or receiving an SMS—creates a distinct CDR. In large networks,
+this translates to hundreds of thousands or even millions of write
+operations per second. Wide-column stores are specifically architected
+for write-heavy workloads. Utilizing Log-Structured Merge-tree
+(LSM-tree) storage engines and sequential, append-only commit logs,
+these databases can ingest massive data streams in real time without
+creating database locks or I/O bottlenecks.</p>
+<h3 id="flexible-handling-of-sparse-data">Flexible Handling of Sparse
+Data</h3>
+<p>A CDR is not a uniform structure. A standard voice call log requires
+fields such as call duration, cell tower IDs, and termination codes,
+whereas an LTE or 5G data session log records IP addresses, packet
+counts, and quality-of-service metrics. In a traditional relational
+database, accounting for these diverse records requires either complex
+table joins or wide tables filled with empty null values. Wide-column
+databases treat rows as dynamic maps where columns only exist if they
+contain data. This schema flexibility allows telcos to store diverse
+event types in a single table without wasting storage space.</p>
+<h3 id="linear-horizontal-scalability">Linear Horizontal
+Scalability</h3>
+<p>Telecom traffic grows continuously as mobile data usage expands and
+Internet of Things (IoT) devices proliferate. Wide-column stores scale
+horizontally by distributing data across clusters of commodity hardware
+using consistent hashing. When storage capacity or query limits are
+reached, operators can add nodes to the cluster without taking the
+system offline or re-architecting the database. Capacity scales
+linearly, ensuring that a cluster can grow from handling gigabytes to
+petabytes seamlessly.</p>
+<h3 id="optimized-time-series-and-key-based-lookups">Optimized
+Time-Series and Key-Based Lookups</h3>
+<p>CDRs are inherently time-series records that are most frequently
+queried by subscriber ID, telephone number, or time range. Wide-column
+databases utilize composite primary keys consisting of partition keys
+and clustering columns. By partitioning data on subscriber identifiers
+and sorting it via timestamp clustering keys, the database ensures that
+all records for a specific user over a billing period are stored
+contiguously on disk. This enables millisecond-level lookups for billing
+generation, dispute resolution, and near-real-time fraud detection.</p>
+<h3 id="high-availability-with-zero-single-point-of-failure">High
+Availability with Zero Single Point of Failure</h3>
+<p>Telecommunications networks run 24/7/365, making downtime
+unacceptable for both regulatory compliance and revenue generation. Most
+wide-column stores use a decentralized, masterless architecture where
+every node performs identical roles. Data is automatically replicated
+across multiple nodes and distinct geographical data centers. If an
+individual node, rack, or entire data center fails, the database
+continues processing read and write requests uninterrupted, guaranteeing
+high availability for mission-critical CDR pipelines.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/why-telcos-use-wide-column-no-sql-for-cd-rs';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

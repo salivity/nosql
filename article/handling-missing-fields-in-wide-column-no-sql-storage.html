@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Handling Missing Fields in Wide-Column NoSQL Storage - nosql</title>
+    <meta name="description" content="Wide-column NoSQL databases—such as Apache Cassandra, ScyllaDB, and Google Cloud Bigtable—rely on a sparse-matrix data model designed to efficiently handle vast datasets with varying schema structures. Unlike relational database management systems (RDBMS)">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/handling-missing-fields-in-wide-column-no-sql-storage">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Handling Missing Fields in Wide-Column NoSQL Storage - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/handling-missing-fields-in-wide-column-no-sql-storage" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Wide-column NoSQL databases—such as Apache Cassandra, ScyllaDB, and Google Cloud Bigtable—rely on a sparse-matrix data model designed to efficiently handle vast datasets with varying schema structures. Unlike relational database management systems (RDBMS)" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="handling-missing-fields-in-wide-column-nosql-storage">Handling
+Missing Fields in Wide-Column NoSQL Storage</h1>
+<p>Wide-column NoSQL databases—such as Apache Cassandra, ScyllaDB, and
+Google Cloud Bigtable—rely on a sparse-matrix data model designed to
+efficiently handle vast datasets with varying schema structures. Unlike
+relational database management systems (RDBMS) that allocate physical
+storage space or maintain fixed-offset bitmasks for <code>NULL</code>
+fields, wide-column engines use dynamic, cell-level serialization. This
+article explains the underlying physical mechanics of how wide-column
+stores manage missing columns on disk, the role of Log-Structured
+Merge-trees (LSM-trees), and the difference between omitted values and
+explicit deletions.</p>
+<h3 id="the-sparse-storage-model">The Sparse Storage Model</h3>
+<p>In a traditional relational database, tables have a rigid physical
+schema. When a row is stored on disk, the database engine typically
+pre-allocates bytes for each defined column in that row or references a
+null bitmap to track absent fields at fixed offsets.</p>
+<p>Wide-column architectures discard fixed row templates entirely.
+Instead of mapping a row as a fixed array of attributes, these engines
+treat a row (or partition) as a collection of individual key-value pairs
+sorted by column identifier. If an application inserts a record
+containing ten possible attributes but only specifies values for three,
+the database writes only those three specific cells to persistent
+storage. Missing fields consume zero bytes of disk space because the
+physical row simply does not record their existence.</p>
+<h3 id="cell-level-serialization-in-sstables">Cell-Level Serialization
+in SSTables</h3>
+<p>Most wide-column databases write data to disk using append-only
+immutable files known as Sorted String Tables (SSTables). Within an
+SSTable, data is structured hierarchically:</p>
+<ol type="1">
+<li><strong>Partition Key:</strong> Identifies the overall row or group
+of related rows.</li>
+<li><strong>Clustering Key (if applicable):</strong> Defines the unique
+sorting key inside the partition.</li>
+<li><strong>Cells (Columns):</strong> The actual data payloads.</li>
+</ol>
+<p>Each cell written to disk is a self-contained unit typically
+consisting of:</p>
+<ul>
+<li>The column name (or an internal identifier)</li>
+<li>The column value (payload)</li>
+<li>A timestamp (used for conflict resolution and ordering)</li>
+<li>Internal metadata flags (such as Time-to-Live or deletion
+status)</li>
+</ul>
+<p>When an insertion occurs, only the explicitly provided cells are
+serialized into the in-memory write buffer (Memtable) and eventually
+flushed to an SSTable. Because each cell explicitly identifies its
+column name along with its value, the engine does not rely on spatial
+position within a physical row to determine which attribute a value
+belongs to. Consequently, missing columns are completely absent from the
+serialized byte stream.</p>
+<h3 id="missing-fields-vs-explicit-deletions-tombstones">Missing Fields
+vs. Explicit Deletions (Tombstones)</h3>
+<p>A critical distinction in wide-column storage mechanics is the
+difference between omitting a field at write time and explicitly setting
+a field to <code>NULL</code> or deleting it.</p>
+<ul>
+<li><strong>Omission (Missing Field):</strong> If an application inserts
+a record without referencing a particular column, no write operation is
+scheduled for that column. No data is stored, and no metadata is
+created.</li>
+<li><strong>Explicit <code>NULL</code> or Deletion:</strong> If an
+application issues an update that sets an existing column to
+<code>NULL</code>, the database does not erase the previously written
+bytes, as SSTables are immutable. Instead, it writes a special record
+called a <strong>tombstone</strong>. A tombstone includes the column
+name, a timestamp, and a deletion marker indicating that the value is
+considered dead as of that timestamp.</li>
+</ul>
+<p>While a missing column costs zero storage overhead, an explicit
+<code>NULL</code> or deletion actually increases physical storage
+requirements temporarily until compaction processes reconcile the
+versions and evict the dead data.</p>
+<h3 id="reconstruction-on-read">Reconstruction on Read</h3>
+<p>Because missing columns are not physically written, the database must
+resolve their absence during query execution:</p>
+<ol type="1">
+<li>The read coordinator locates the relevant partition across Memtables
+and SSTables.</li>
+<li>It merges matching cells across the different storage files,
+applying the latest timestamp to resolve updates.</li>
+<li>If the query requests a column that does not exist in any associated
+SSTable or Memtable for that partition, the engine generates an
+in-memory <code>NULL</code> or default response to return across the
+client driver interface.</li>
+</ol>
+<p>By shifting the burden of missing data from physical disk layout to
+dynamic read-time synthesis, wide-column NoSQL platforms maximize
+storage density and eliminate the physical overhead typically associated
+with sparse, evolving datasets.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/handling-missing-fields-in-wide-column-no-sql-storage';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

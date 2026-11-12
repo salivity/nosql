@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Delta-of-Delta Compression for Timestamps - nosql</title>
+    <meta name="description" content="Time-series NoSQL databases process massive volumes of sequential data points, where timestamps alone can consume substantial storage if stored as raw 64-bit integers. Delta-of-delta encoding solves this scalability bottleneck by calculating the differenc">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/delta-of-delta-compression-for-timestamps">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Delta-of-Delta Compression for Timestamps - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/delta-of-delta-compression-for-timestamps" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Time-series NoSQL databases process massive volumes of sequential data points, where timestamps alone can consume substantial storage if stored as raw 64-bit integers. Delta-of-delta encoding solves this scalability bottleneck by calculating the differenc" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="delta-of-delta-compression-for-timestamps">Delta-of-Delta
+Compression for Timestamps</h1>
+<p>Time-series NoSQL databases process massive volumes of sequential
+data points, where timestamps alone can consume substantial storage if
+stored as raw 64-bit integers. Delta-of-delta encoding solves this
+scalability bottleneck by calculating the difference between consecutive
+time intervals rather than storing absolute values. This article
+explains how delta-of-delta compression works, why it achieves extreme
+compression ratios on periodic time-series metrics, and why modern
+distributed engines like Prometheus, InfluxDB, and Facebook's Gorilla
+rely on it to optimize storage and query throughput.</p>
+<h3 id="the-problem-with-raw-timestamps">The Problem with Raw
+Timestamps</h3>
+<p>In time-series workloads, every metric value requires an associated
+timestamp. Standard Unix timestamps are typically represented as 64-bit
+integers (<code>int64</code>) to preserve nanosecond or millisecond
+precision. Storing billions of metrics per day means that raw timestamps
+alone quickly demand gigabytes of disk and memory, degrading cache
+efficiency and increasing I/O overhead.</p>
+<h3 id="how-delta-encoding-falls-short">How Delta Encoding Falls
+Short</h3>
+<p>A basic approach to reducing timestamp size is simple delta encoding.
+Instead of storing absolute timestamps (<span
+class="math inline">\(T_n\)</span>), the database records the difference
+between consecutive timestamps:</p>
+<p><span class="math display">\[D_n = T_n - T_{n-1}\]</span></p>
+<p>While simple delta encoding reduces absolute values from 64-bit
+integers to smaller numbers, it still requires multiple bytes per entry
+if the interval fluctuates slightly or if the sampling rate is coarse.
+Furthermore, standard variable-byte encoding does not maximize
+efficiency when the sampling rate is largely predictable.</p>
+<h3 id="how-delta-of-delta-encoding-works">How Delta-of-Delta Encoding
+Works</h3>
+<p>Most time-series data is collected at fixed intervals (such as every
+10, 30, or 60 seconds). Because the time between readings (<span
+class="math inline">\(D_n\)</span>) is nearly constant, the change in
+the delta—the "delta-of-delta" (<span
+class="math inline">\(D&#39;_n\)</span>)—is frequently zero:</p>
+<p><span class="math display">\[D&#39;_n = D_n - D_{n-1} = (T_n -
+T_{n-1}) - (T_{n-1} - T_{n-2})\]</span></p>
+<p>Consider an agent sending metrics every 10 seconds:</p>
+<ul>
+<li><strong>Absolute Timestamps:</strong> 1600000000, 1600000010,
+1600000020, 1600000030</li>
+<li><strong>Deltas (<span class="math inline">\(D\)</span>):</strong>
+10, 10, 10</li>
+<li><strong>Delta-of-Deltas (<span
+class="math inline">\(D&#39;\)</span>):</strong> 0, 0</li>
+</ul>
+<p>When network jitter or latency causes small variations (e.g.,
+intervals of 10s, 11s, 9s), the delta-of-deltas remain very close to
+zero (<span class="math inline">\(+1\)</span>, <span
+class="math inline">\(-2\)</span>).</p>
+<h3 id="variable-length-bit-packing">Variable-Length Bit Packing</h3>
+<p>Delta-of-delta values cluster heavily around zero, making them ideal
+candidates for variable-length bit packing. As popularized by Facebook's
+Gorilla paper, time-series stores use an encoding scheme that maps the
+delta-of-delta into variable-sized bit buckets:</p>
+<ul>
+<li><strong>If <span class="math inline">\(D&#39; = 0\)</span>:</strong>
+Store a single <code>0</code> bit.</li>
+<li><strong>If <span class="math inline">\(-63 \le D&#39; \le
+64\)</span>:</strong> Store the bit prefix <code>10</code>, followed by
+7 bits of value.</li>
+<li><strong>If <span class="math inline">\(-255 \le D&#39; \le
+256\)</span>:</strong> Store the bit prefix <code>110</code>, followed
+by 9 bits of value.</li>
+<li><strong>If <span class="math inline">\(-2047 \le D&#39; \le
+2048\)</span>:</strong> Store the bit prefix <code>1110</code>, followed
+by 12 bits of value.</li>
+<li><strong>Otherwise:</strong> Store the bit prefix <code>1111</code>,
+followed by the full 32-bit value.</li>
+</ul>
+<p>Under consistent collection intervals, a timestamp requires only
+<strong>a single bit</strong> of storage instead of the original 64
+bits.</p>
+<h3 id="why-time-series-nosql-stores-rely-on-it">Why Time-Series NoSQL
+Stores Rely on It</h3>
+<ol type="1">
+<li><strong>Extreme Compression Ratios:</strong> In real-world
+environments where agents emit heartbeats or metrics periodically,
+timestamps compress by over 95%, frequently averaging around 1.37 bits
+per timestamp.</li>
+<li><strong>Reduced Disk and Memory Footprint:</strong> Shrinking
+timestamps allows databases to retain active working sets entirely in
+RAM, significantly accelerating read queries over historical
+ranges.</li>
+<li><strong>Optimized Scan Performance:</strong> Decompressing simple
+bit-shift and addition operations is computationally lightweight,
+allowing CPUs to scan and filter billions of rows per second directly
+from memory without saturating bus bandwidth.</li>
+<li><strong>Resilience to Jitter:</strong> Unlike rigid run-length
+encoding that breaks whenever an interval deviates slightly,
+delta-of-delta smoothly accommodates network delays by falling back to
+slightly wider bit buckets without discarding the compression
+scheme.</li>
+</ol></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/delta-of-delta-compression-for-timestamps';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

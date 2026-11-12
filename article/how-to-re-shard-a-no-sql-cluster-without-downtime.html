@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How to Re-Shard a NoSQL Cluster Without Downtime - nosql</title>
+    <meta name="description" content="Re-sharding an active NoSQL database without service disruption is essential for maintaining high availability while scaling horizontally to meet increasing data volumes and throughput. Achieving zero downtime requires a phased migration pattern: provisio">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/how-to-re-shard-a-no-sql-cluster-without-downtime">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How to Re-Shard a NoSQL Cluster Without Downtime - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/how-to-re-shard-a-no-sql-cluster-without-downtime" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Re-sharding an active NoSQL database without service disruption is essential for maintaining high availability while scaling horizontally to meet increasing data volumes and throughput. Achieving zero downtime requires a phased migration pattern: provisio" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-to-re-shard-a-nosql-cluster-without-downtime">How to
+Re-Shard a NoSQL Cluster Without Downtime</h1>
+<p>Re-sharding an active NoSQL database without service disruption is
+essential for maintaining high availability while scaling horizontally
+to meet increasing data volumes and throughput. Achieving zero downtime
+requires a phased migration pattern: provisioning the new cluster
+topology, enabling asynchronous or dual-writing pipelines, backfilling
+historical records without saturating production I/O, verifying data
+integrity, and incrementally redirecting read and write workloads before
+retiring legacy nodes.</p>
+<h3 id="1-define-the-new-sharding-strategy">1. Define the New Sharding
+Strategy</h3>
+<p>Analyze current performance bottlenecks to determine why the existing
+scheme failed—such as hot spotting on a specific key or uneven data
+distribution across partitions. Choose a new partition key (or adjust
+the hash ring token ranges) that guarantees uniform data spread.
+Calculate the target number of partitions based on projected growth to
+prevent the need for another re-sharding cycle in the near term.</p>
+<h3 id="2-provision-new-infrastructure">2. Provision New
+Infrastructure</h3>
+<p>Deploy the new nodes or shards alongside the existing cluster.
+Configure networking, storage, replication factors, and security access
+controls to mirror or exceed the specifications of the running cluster.
+Keep the new nodes separate from the active query path so they do not
+consume resources allocated to ongoing application traffic.</p>
+<h3 id="3-implement-change-data-capture-and-dual-writing">3. Implement
+Change Data Capture and Dual-Writing</h3>
+<p>To avoid missing writes during migration, implement a mechanism to
+capture ongoing modifications.</p>
+<ul>
+<li><strong>Dual-Writing:</strong> Update the application or database
+abstraction layer to write new data to both the old shards and the new
+shards concurrently. Reads should continue targeting the old shards
+exclusively.</li>
+<li><strong>CDC / Event Streaming:</strong> Alternatively, stream
+changes directly from the old shards' write-ahead logs (WAL) or oplog
+via tools like Kafka or Debezium into a consumer that maps records to
+the new shard locations.</li>
+</ul>
+<h3 id="4-backfill-historical-data">4. Backfill Historical Data</h3>
+<p>Transfer existing records from the old shards to the new shards
+according to the new partitioning rules.</p>
+<ul>
+<li>Run backfill jobs in batches during low-traffic periods.</li>
+<li>Apply aggressive rate-limiting on extraction queries to avoid
+elevating read latency for live users.</li>
+<li>Ensure backfill operations are idempotent (e.g., using
+<code>UPSERT</code> semantics) so that any record overwritten by the
+concurrent dual-writing pipeline is not regressed to an older
+state.</li>
+</ul>
+<h3 id="5-validate-consistency-and-reconcile-differences">5. Validate
+Consistency and Reconcile Differences</h3>
+<p>Once the historical backfill completes and replication lag approaches
+zero:</p>
+<ul>
+<li>Run automated data validation scripts comparing row counts,
+partition distributions, and cryptographic checksums between the source
+and target shards.</li>
+<li>Address and reconcile any synchronization anomalies caused by
+network timeouts or conflicting concurrent writes.</li>
+</ul>
+<h3 id="6-gradually-shift-read-traffic">6. Gradually Shift Read
+Traffic</h3>
+<p>Transition application read traffic to the new shards using an
+incremental canary deployment (e.g., routing 10%, then 50%, then 100% of
+read queries). Monitor critical health metrics closely during each
+phase: query latency, error rates, CPU/memory usage, and connection pool
+saturation. If anomalies occur, fall back immediately to reading from
+the original shards.</p>
+<h3 id="7-switch-primary-writes-and-decommission">7. Switch Primary
+Writes and Decommission</h3>
+<p>Once 100% of read traffic is successfully handled by the new
+shards:</p>
+<ol type="1">
+<li>Update application routing to send primary writes exclusively to the
+new shards.</li>
+<li>Terminate the dual-writing or CDC pipeline.</li>
+<li>Keep the old shards online in a read-only state for a brief grace
+period as an emergency rollback target.</li>
+<li>Take a final snapshot of the decommissioned shards for compliance
+and disaster recovery, then terminate the old infrastructure.</li>
+</ol></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/how-to-re-shard-a-no-sql-cluster-without-downtime';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

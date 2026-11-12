@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ACID Compliance in Modern Distributed NoSQL Databases - nosql</title>
+    <meta name="description" content="Historically, NoSQL databases prioritized horizontal scalability and high availability by adopting the BASE (Basically Available, Soft state, Eventual consistency) model, trading off the strict ACID guarantees associated with traditional relational databa">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/acid-compliance-in-modern-distributed-no-sql-databases">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="ACID Compliance in Modern Distributed NoSQL Databases - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/acid-compliance-in-modern-distributed-no-sql-databases" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Historically, NoSQL databases prioritized horizontal scalability and high availability by adopting the BASE (Basically Available, Soft state, Eventual consistency) model, trading off the strict ACID guarantees associated with traditional relational databa" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="acid-compliance-in-modern-distributed-nosql-databases">ACID
+Compliance in Modern Distributed NoSQL Databases</h1>
+<p>Historically, NoSQL databases prioritized horizontal scalability and
+high availability by adopting the BASE (Basically Available, Soft state,
+Eventual consistency) model, trading off the strict ACID guarantees
+associated with traditional relational databases. Today, modern
+distributed NoSQL and NewSQL architectures bridge this gap, delivering
+full ACID compliance without sacrificing scale. This is achieved by
+combining robust distributed consensus algorithms, two-phase commit
+protocols, advanced physical and logical clock synchronization, and
+multi-version concurrency control.</p>
+<h3 id="distributed-consensus-algorithms">Distributed Consensus
+Algorithms</h3>
+<p>At the core of distributed ACID compliance is consensus. Nodes in a
+cluster must agree on the order and validity of operations before
+writing them to disk. Modern platforms use consensus algorithms like
+Raft or Paxos (and their variants) within shard-level replication
+groups.</p>
+<p>Instead of writing to a single node, a write request is routed to a
+group leader. The leader proposes the log entry to peer follower nodes.
+Once a quorum (a majority of nodes) acknowledges the log entry, it is
+committed. This guarantees the <strong>Atomicity</strong> and
+<strong>Durability</strong> of writes within a single partition, even if
+a minority of nodes fail during the process.</p>
+<h3 id="two-phase-commit-for-cross-shard-transactions">Two-Phase Commit
+for Cross-Shard Transactions</h3>
+<p>While consensus handles writes within a single partition or shard,
+multi-record or multi-shard transactions require an additional
+coordination layer. Distributed databases employ a Two-Phase Commit
+(2PC) protocol alongside consensus.</p>
+<ol type="1">
+<li><strong>Prepare Phase:</strong> The coordinator node asks all
+participating shards whether they can commit the transaction. Each shard
+checks for conflicts and uses its local consensus group (e.g., Raft) to
+persist a "prepared" intent lock to disk.</li>
+<li><strong>Commit Phase:</strong> If all shards vote "yes," the
+coordinator issues a commit command, which is also written via
+consensus. If any shard votes "no" or times out, the entire transaction
+is rolled back, preserving <strong>Atomicity</strong>.</li>
+</ol>
+<p>To resolve traditional 2PC single-point-of-failure vulnerabilities,
+modern engines place the transaction coordinator itself inside a
+replicated, consensus-driven state machine.</p>
+<h3 id="time-synchronization-and-hybrid-logical-clocks">Time
+Synchronization and Hybrid Logical Clocks</h3>
+<p>Enforcing strict <strong>Consistency</strong> and
+<strong>Isolation</strong> requires a deterministic method to sequence
+transactions across geographically dispersed nodes. Because standard
+physical hardware clocks experience drift, distributed engines use
+specialized time-tracking mechanisms:</p>
+<ul>
+<li><strong>Hardware-Assisted Physical Clocks:</strong> Systems like
+Google Spanner use atomic clocks and GPS receivers (TrueTime) to
+establish an absolute time bound with guaranteed error margins (<span
+class="math inline">\(\epsilon\)</span>).</li>
+<li><strong>Hybrid Logical Clocks (HLCs):</strong> Platforms running on
+commodity infrastructure combine physical time with logical sequence
+counters. HLCs ensure that cause-and-effect relationships between
+transactions are strictly preserved, allowing the database to assign
+globally monotonic transaction timestamps without requiring specialized
+hardware.</li>
+</ul>
+<h3 id="multi-version-concurrency-control-mvcc">Multi-Version
+Concurrency Control (MVCC)</h3>
+<p>To achieve high read and write throughput without blocking, modern
+systems implement distributed Multi-Version Concurrency Control (MVCC).
+Rather than overwriting existing data, updates create a new version of
+the record tagged with a specific transaction timestamp.</p>
+<p>MVCC enables non-blocking read operations. When a read query begins,
+it reads a snapshot of the database at a specific timestamp in the past.
+This provides <strong>Snapshot Isolation</strong> or
+<strong>Serializable Isolation</strong>, ensuring that reads do not
+block concurrent writes, and writes do not block reads, directly
+fulfilling <strong>Isolation</strong> guarantees.</p>
+<h3 id="conflict-detection-and-distributed-locking">Conflict Detection
+and Distributed Locking</h3>
+<p>When concurrent transactions attempt to modify the same keys, the
+system must detect and resolve conflicts. Systems utilize either:</p>
+<ul>
+<li><strong>Pessimistic Concurrency Control:</strong> Acquires
+distributed locks or intents on rows/keys before processing. If a lock
+cannot be acquired, the transaction waits or aborts.</li>
+<li><strong>Optimistic Concurrency Control (OCC):</strong> Allows
+operations to proceed under the assumption that conflicts are rare.
+During the prepare phase, the system verifies that no read data was
+modified by another transaction. If a conflict occurs, the transaction
+rolls back and retries.</li>
+</ul>
+<p>By integrating localized consensus, global cross-shard commit
+protocols, monotonic timestamping, and versioned storage engines, modern
+distributed NoSQL systems maintain full ACID properties while operating
+at cloud scale across multiple nodes.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/acid-compliance-in-modern-distributed-no-sql-databases';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

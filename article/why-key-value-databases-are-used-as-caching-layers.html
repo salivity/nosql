@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Why Key-Value Databases Are Used as Caching Layers - nosql</title>
+    <meta name="description" content="Modern web applications frequently place key-value NoSQL databases ahead of relational database management systems (RDBMS) to maximize performance and handle high traffic volumes. This architectural pattern leverages the in-memory processing and simplifie">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/why-key-value-databases-are-used-as-caching-layers">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Why Key-Value Databases Are Used as Caching Layers - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/why-key-value-databases-are-used-as-caching-layers" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Modern web applications frequently place key-value NoSQL databases ahead of relational database management systems (RDBMS) to maximize performance and handle high traffic volumes. This architectural pattern leverages the in-memory processing and simplifie" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="why-key-value-databases-are-used-as-caching-layers">Why
+Key-Value Databases Are Used as Caching Layers</h1>
+<p>Modern web applications frequently place key-value NoSQL databases
+ahead of relational database management systems (RDBMS) to maximize
+performance and handle high traffic volumes. This architectural pattern
+leverages the in-memory processing and simplified lookups of key-value
+stores to intercept read requests before they hit the relational
+backend. By doing so, systems achieve sub-millisecond data retrieval,
+dramatically decrease compute and input/output (I/O) pressure on the
+primary database, and maintain responsive user experiences at scale.</p>
+<h3 id="sub-millisecond-latency-and-in-memory-execution">Sub-Millisecond
+Latency and In-Memory Execution</h3>
+<p>Relational databases rely on disk storage—even with solid-state
+drives (SSDs)—to ensure ACID compliance and long-term data durability.
+Writing to and reading from disk introduces latency, typically measured
+in milliseconds. In contrast, key-value NoSQL stores (such as Redis or
+Memcached) reside primarily in random-access memory (RAM). Memory access
+operates in microseconds, providing immediate access to frequently
+requested data.</p>
+<h3 id="direct-key-lookups-vs-complex-query-execution">Direct Key
+Lookups vs. Complex Query Execution</h3>
+<p>Relational backends spend significant compute resources parsing SQL
+queries, calculating execution plans, evaluating constraints, and
+performing multi-table joins. A key-value store bypasses this overhead
+through a simple data model: a unique identifier (the key) points
+directly to a data payload (the value). This <span
+class="math inline">\(O(1)\)</span> time complexity allows the caching
+layer to fetch records instantly without the CPU overhead associated
+with relational query compilation and table scans.</p>
+<h3 id="offloading-repeated-reads-from-the-rdbms">Offloading Repeated
+Reads from the RDBMS</h3>
+<p>Most web workloads are heavily read-dominant, with applications
+frequently requesting identical datasets, such as user profiles, session
+states, product catalogs, or site navigation menus. When an RDBMS
+executes the same computationally expensive query thousands of times per
+second, resource saturation inevitably occurs. A key-value caching layer
+intercepts these repetitive requests. As long as the cache hit ratio
+remains high, the relational database only handles write operations,
+updates, and novel queries, keeping connection pools free and CPU
+utilization low.</p>
+<h3 id="simplified-pre-computed-data-storage">Simplified Pre-Computed
+Data Storage</h3>
+<p>Relational databases return raw rows that application servers must
+map and aggregate into objects, often involving expensive serialization
+and deserialization steps. With a key-value store, developers can store
+already computed, fully hydrated JSON strings or binary representations
+directly. When the application requests the data, it receives a payload
+that is immediately ready to serve to the client, removing computational
+burden from both the database and the backend application layer.</p>
+<h3 id="cost-effective-scalability-and-concurrency">Cost-Effective
+Scalability and Concurrency</h3>
+<p>Scaling a traditional relational database horizontally requires
+complex replication schemes, distributed locking mechanisms, or sharding
+architectures that carry significant management overhead. Key-value
+stores are designed natively to handle high concurrent connections with
+minimal memory footprints per client. Deploying a key-value tier
+provides a buffer that absorbs sudden traffic spikes, preventing
+cascading failures across the entire data infrastructure without
+requiring costly enterprise hardware upgrades for the relational
+database.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/why-key-value-databases-are-used-as-caching-layers';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

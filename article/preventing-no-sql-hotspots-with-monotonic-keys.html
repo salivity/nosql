@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Preventing NoSQL Hotspots with Monotonic Keys - nosql</title>
+    <meta name="description" content="Monotonically increasing keys, such as sequential IDs and timestamps, frequently cause partition hot-spotting in distributed NoSQL databases by concentrating all current write traffic onto a single partition. This article outlines the root cause of this p">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/preventing-no-sql-hotspots-with-monotonic-keys">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Preventing NoSQL Hotspots with Monotonic Keys - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/preventing-no-sql-hotspots-with-monotonic-keys" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Monotonically increasing keys, such as sequential IDs and timestamps, frequently cause partition hot-spotting in distributed NoSQL databases by concentrating all current write traffic onto a single partition. This article outlines the root cause of this p" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="preventing-nosql-hotspots-with-monotonic-keys">Preventing NoSQL
+Hotspots with Monotonic Keys</h1>
+<p>Monotonically increasing keys, such as sequential IDs and timestamps,
+frequently cause partition hot-spotting in distributed NoSQL databases
+by concentrating all current write traffic onto a single partition. This
+article outlines the root cause of this performance bottleneck and
+details proven architectural strategies—including key salting, hashing,
+composite partition keys, and key reversal—to evenly distribute I/O
+operations across a cluster.</p>
+<h3 id="the-problem-with-monotonically-increasing-keys">The Problem with
+Monotonically Increasing Keys</h3>
+<p>In distributed NoSQL architectures (such as Cassandra, DynamoDB, or
+Bigtable), data is divided across partitions using partition keys. When
+these keys are monotonically increasing (e.g.,
+<code>2023-10-27-10:00:01</code>, <code>2023-10-27-10:00:02</code>), all
+incoming write requests route to the same physical node or partition
+range. This leads to a severe imbalance: one node exceeds its throughput
+limits and experiences throttling or failure, while the rest of the
+cluster remains underutilized.</p>
+<h3 id="1-key-salting-adding-a-random-prefix-or-suffix">1. Key Salting
+(Adding a Random Prefix or Suffix)</h3>
+<p>Key salting involves appending or prepending a random value from a
+predetermined range to the monotonic key.</p>
+<ul>
+<li><strong>How it works:</strong> Instead of writing to key
+<code>2023-10-27</code>, the application appends a random integer
+between <code>0</code> and <code>N-1</code> (e.g.,
+<code>2023-10-27_3</code>).</li>
+<li><strong>Write impact:</strong> Writes are uniformly spread across
+<code>N</code> distinct partitions.</li>
+<li><strong>Read trade-off:</strong> To query data for a specific
+timestamp, the application must perform parallel reads across all
+<code>N</code> partitions (scatter-gather) and merge the results.</li>
+</ul>
+<h3
+id="2-composite-keys-combining-natural-attributes-with-monotonic-keys">2.
+Composite Keys: Combining Natural Attributes with Monotonic Keys</h3>
+<p>A composite key decouples partition assignment from data ordering by
+pairing a high-cardinality natural identifier with the monotonic
+sequence.</p>
+<ul>
+<li><strong>How it works:</strong> The database assigns the partition
+key to an attribute with high entropy (e.g., <code>user_id</code>,
+<code>device_id</code>, or <code>tenant_id</code>) and uses the
+monotonic timestamp as the sort or clustering key.</li>
+<li><strong>Write impact:</strong> Writes are distributed across nodes
+based on the entity identifier, rather than the timestamp.</li>
+<li><strong>Read trade-off:</strong> Range queries over time must be
+scoped to a specific entity rather than system-wide.</li>
+</ul>
+<h3 id="3-cryptographic-and-non-cryptographic-hashing">3. Cryptographic
+and Non-Cryptographic Hashing</h3>
+<p>Applying a hash function to the monotonic key before storage
+distributes keys uniformly across a hash ring.</p>
+<ul>
+<li><strong>How it works:</strong> The application or database driver
+passes the sequential key through a hashing algorithm (such as Murmur3
+or MD5). The resulting hash serves as the partition routing token.</li>
+<li><strong>Write impact:</strong> Sequentially generated keys produce
+non-sequential hashes, scattering consecutive writes across the entire
+cluster.</li>
+<li><strong>Read trade-off:</strong> Lexicographical and range-based
+ordering is lost at the partition level. Range scans require querying
+every node.</li>
+</ul>
+<h3 id="4-reverse-key-partitioning">4. Reverse Key Partitioning</h3>
+<p>Reverse key partitioning reverses the characters or digits of the
+sequential key prior to persistence.</p>
+<ul>
+<li><strong>How it works:</strong> If a sequence produces IDs such as
+<code>10001</code>, <code>10002</code>, and <code>10003</code>, the
+stored keys become <code>10001</code>, <code>20001</code>, and
+<code>30001</code>.</li>
+<li><strong>Write impact:</strong> Because the least significant digits
+change most frequently, reversing the string moves high-variance digits
+to the front, spreading writes across the partition range.</li>
+<li><strong>Read trade-off:</strong> Native range scans become
+impossible because adjacent logical records are no longer adjacent in
+storage.</li>
+</ul>
+<h3 id="5-time-bucketed-salting">5. Time-Bucketed Salting</h3>
+<p>When global time-range queries are required but write volume exceeds
+single-partition capacity, time-bucketed salting provides a middle
+ground.</p>
+<ul>
+<li><strong>How it works:</strong> Data is divided into coarse time
+intervals (e.g., hour, day) combined with a deterministic salt derived
+from a sub-attribute:
+<code>PartitionKey = TimeBucket + (entity_id % salt_count)</code>.</li>
+<li><strong>Write impact:</strong> Writes are constrained to the current
+time window but distributed across a defined number of
+sub-partitions.</li>
+<li><strong>Read trade-off:</strong> Queries for a specific time range
+only need to query the predefined number of sub-partitions for that
+specific time window, avoiding a cluster-wide scan.</li>
+</ul></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/preventing-no-sql-hotspots-with-monotonic-keys';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

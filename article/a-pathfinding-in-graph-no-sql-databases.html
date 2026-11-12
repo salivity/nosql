@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>A* Pathfinding in Graph NoSQL Databases - nosql</title>
+    <meta name="description" content="This article explores how graph NoSQL database engines execute the A (A-star) pathfinding algorithm across weighted relationship graphs. It details the structural advantages of index-free adjacency, how graph engines extract and compute dynamic edge weigh">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/a-pathfinding-in-graph-no-sql-databases">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="A* Pathfinding in Graph NoSQL Databases - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/a-pathfinding-in-graph-no-sql-databases" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explores how graph NoSQL database engines execute the A (A-star) pathfinding algorithm across weighted relationship graphs. It details the structural advantages of index-free adjacency, how graph engines extract and compute dynamic edge weigh" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="a-pathfinding-in-graph-nosql-databases">A* Pathfinding in Graph
+NoSQL Databases</h1>
+<p>This article explores how graph NoSQL database engines execute the A*
+(A-star) pathfinding algorithm across weighted relationship graphs. It
+details the structural advantages of index-free adjacency, how graph
+engines extract and compute dynamic edge weights, the integration of
+heuristic functions using node properties, and the in-memory execution
+pipeline required to find the shortest path efficiently.</p>
+<h3 id="native-graph-storage-and-index-free-adjacency">Native Graph
+Storage and Index-Free Adjacency</h3>
+<p>Traditional relational databases require costly table joins and index
+lookups to traverse connections between entities. Graph NoSQL platforms
+(such as Neo4j or Amazon Neptune) bypass this overhead using index-free
+adjacency.</p>
+<p>In a native graph architecture, each node maintains direct memory
+pointers to its adjacent edges and neighboring nodes. When the A*
+algorithm expands the current frontier, it traverses these direct memory
+references in <span class="math inline">\(O(1)\)</span> constant time
+per edge. This architectural layout ensures that traversal performance
+depends solely on the size of the subgraph being explored rather than
+the overall volume of the entire database.</p>
+<h3 id="calculating-the-known-path-cost-gn">Calculating the Known Path
+Cost: <span class="math inline">\(g(n)\)</span></h3>
+<p>The A* algorithm evaluates nodes based on the function <span
+class="math inline">\(f(n) = g(n) + h(n)\)</span>, where <span
+class="math inline">\(g(n)\)</span> represents the exact cost to reach
+node <span class="math inline">\(n\)</span> from the start node.</p>
+<p>In a graph database, edge weights (such as physical distance,
+latency, toll cost, or relationship strength) are stored directly as
+properties on the relationship records. During traversal:</p>
+<ol type="1">
+<li>The graph engine reads the relationship record from disk or memory
+buffers.</li>
+<li>It extracts the numerical weight property assigned to that
+relationship.</li>
+<li>It accumulates this weight into the total running cost <span
+class="math inline">\(g(n)\)</span> from the origin.</li>
+<li>If multiple relationships exist between two nodes, the engine
+filters and selects the optimal edge based on query parameters before
+updating the path cost.</li>
+</ol>
+<h3 id="computing-the-heuristic-estimate-hn">Computing the Heuristic
+Estimate: <span class="math inline">\(h(n)\)</span></h3>
+<p>The heuristic component, <span class="math inline">\(h(n)\)</span>,
+estimates the cheapest path from node <span
+class="math inline">\(n\)</span> to the target. For A* to remain optimal
+and complete, the heuristic must be <em>admissible</em>—it must never
+overestimate the actual cost to reach the goal.</p>
+<p>Graph NoSQL platforms allow developers to register custom heuristic
+functions or leverage built-in spatial capabilities. For example, in a
+spatial routing graph:</p>
+<ul>
+<li>Nodes store latitude and longitude properties.</li>
+<li>When the traversal engine visits node <span
+class="math inline">\(n\)</span>, it retrieves these coordinates
+alongside the target node's coordinates.</li>
+<li>The engine executes a mathematical formula (such as the Haversine or
+Euclidean distance) in-memory to compute <span
+class="math inline">\(h(n)\)</span>.</li>
+</ul>
+<p>Because vertex properties are co-located or quickly accessible via
+internal vertex IDs, heuristic evaluation introduces negligible
+computational overhead during the traversal loop.</p>
+<h3 id="in-memory-execution-and-state-management">In-Memory Execution
+and State Management</h3>
+<p>Pathfinding queries in graph platforms are managed by an in-memory
+execution engine that isolates the state of the active traversal:</p>
+<ul>
+<li><strong>Open Set (Priority Queue):</strong> Graph engines maintain a
+min-priority queue (typically implemented as a binary or Fibonacci heap)
+containing nodes discovered but not yet fully evaluated. Nodes are keyed
+by their total estimated cost, <span
+class="math inline">\(f(n)\)</span>.</li>
+<li><strong>Closed Set (Lookup Map):</strong> A hash set or internal
+bitset tracks visited nodes to prevent redundant expansions and infinite
+loops in cyclic graphs.</li>
+<li><strong>Predecessor Map:</strong> An in-memory tracking structure
+records the optimal parent for each visited node, allowing the database
+to reconstruct the full path sequence once the destination is
+reached.</li>
+</ul>
+<p>The engine pops the node with the lowest <span
+class="math inline">\(f(n)\)</span> value from the priority queue, scans
+its relationship pointers, updates the costs of adjacent unvisited
+nodes, and reprioritizes the queue. The algorithm terminates as soon as
+the target node is extracted from the open set.</p>
+<h3 id="distributed-graph-challenges">Distributed Graph Challenges</h3>
+<p>When scaling horizontally across a cluster, traversing weighted
+graphs becomes more complex. If a relationship points to a node hosted
+on a different physical partition or machine, the engine must perform a
+remote network call to read the target vertex properties and edge
+weights.</p>
+<p>To mitigate network latency during A* execution, modern distributed
+graph engines use edge-cut or vertex-cut partitioning strategies to keep
+densely connected subgraphs on the same machine, or they batch remote
+neighbor evaluations during the frontier expansion step.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/a-pathfinding-in-graph-no-sql-databases';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Key-Value NoSQL Stores Implement Pub-Sub - nosql</title>
+    <meta name="description" content="Key-value NoSQL stores frequently include native publish-subscribe (pub-sub) messaging to provide real-time streaming capabilities alongside ultra-fast data retrieval without requiring external message brokers. While traditionally optimized for distinct p">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/how-key-value-no-sql-stores-implement-pub-sub">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Key-Value NoSQL Stores Implement Pub-Sub - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/how-key-value-no-sql-stores-implement-pub-sub" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Key-value NoSQL stores frequently include native publish-subscribe (pub-sub) messaging to provide real-time streaming capabilities alongside ultra-fast data retrieval without requiring external message brokers. While traditionally optimized for distinct p" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-key-value-nosql-stores-implement-pub-sub">How Key-Value
+NoSQL Stores Implement Pub-Sub</h1>
+<p>Key-value NoSQL stores frequently include native publish-subscribe
+(pub-sub) messaging to provide real-time streaming capabilities
+alongside ultra-fast data retrieval without requiring external message
+brokers. While traditionally optimized for distinct point lookups via
+hash indexes or Log-Structured Merge (LSM) trees, these databases adapt
+their internal architectures to route messages from publishers to
+subscribers. This article examines the core mechanisms key-value engines
+use to implement native pub-sub, including in-memory client registries,
+append-only log primitives, non-blocking network I/O, and distributed
+message routing across clusters.</p>
+<h3 id="in-memory-channel-registries">In-Memory Channel Registries</h3>
+<p>The most common implementation of transient pub-sub (exemplified by
+Redis) relies entirely on memory-resident hash tables rather than
+disk-backed key spaces.</p>
+<ol type="1">
+<li><strong>Channel Mappings:</strong> The database maintains an
+internal dictionary where keys represent channel names, and values are
+linked lists or sets containing references to active client network
+connections.</li>
+<li><strong>Direct Memory Fan-Out:</strong> When a client issues a
+publish command, the engine looks up the channel in the dictionary and
+iterates through the associated list of client sockets. The payload is
+written directly to each socket's output buffer.</li>
+<li><strong>Bypassing the Storage Engine:</strong> Because transient
+pub-sub does not persist messages, the data never touches the underlying
+key-value storage engine, write-ahead logs (WAL), or cache eviction
+layers. This results in minimal latency, though it introduces a
+"fire-and-forget" model where offline subscribers permanently miss
+messages.</li>
+</ol>
+<h3 id="pattern-matching-via-trie-and-radix-structures">Pattern Matching
+via Trie and Radix Structures</h3>
+<p>To support wildcard subscriptions (such as subscribing to
+<code>news.*</code>), key-value systems maintain a separate registry
+alongside the exact-match dictionary.</p>
+<p>This is typically implemented using a linked list of patterns or a
+prefix tree (trie). When a message is published, the server performs an
+exact lookup on the channel dictionary and sequentially or structurally
+traverses the pattern tree. Any pattern matching the target channel
+causes the server to route a copy of the message to the corresponding
+client sockets.</p>
+<h3 id="event-driven-connection-management">Event-Driven Connection
+Management</h3>
+<p>Pub-sub requires persistent, stateful connections between subscribers
+and the database. Key-value stores leverage non-blocking I/O
+multiplexing primitives—such as <code>epoll</code> on Linux,
+<code>kqueue</code> on BSD/macOS, or completion ports on Windows—to
+handle thousands of concurrent subscriber connections within a
+single-threaded or low-threaded event loop.</p>
+<p>When a client enters subscriber mode, the database transitions the
+connection state to listen-only. The server pauses command processing
+for that specific connection, keeping the TCP socket open indefinitely
+with negligible CPU overhead until a message triggers a socket
+write.</p>
+<h3 id="persistent-pub-sub-via-append-only-logs">Persistent Pub-Sub via
+Append-Only Logs</h3>
+<p>Modern key-value databases also implement durable pub-sub patterns
+through append-only log data structures (such as Redis Streams).</p>
+<p>Unlike transient pub-sub, this approach uses the primary storage
+engine:</p>
+<ul>
+<li><strong>Log Representation:</strong> Each channel or stream is
+modeled as an append-only collection of entries ordered by a
+monotonically increasing timestamp or sequence ID.</li>
+<li><strong>Consumer Tracking:</strong> The database stores metadata
+regarding consumer groups and read offsets directly in the key-value
+structure. Subscribers request messages starting from a specific
+ID.</li>
+<li><strong>Blocking Read Commands:</strong> If no new data is present,
+the storage engine registers the client in a waiting queue. Once an
+append operation occurs, the database identifies blocked clients waiting
+on that log and serves the appended entries, combining traditional
+database durability with streaming delivery.</li>
+</ul>
+<h3 id="cluster-wide-message-propagation">Cluster-Wide Message
+Propagation</h3>
+<p>In distributed or sharded key-value stores, clients may be connected
+to different nodes across the cluster. Key-value engines handle
+cross-node message routing through two primary approaches:</p>
+<ul>
+<li><strong>Cluster Broadcasting:</strong> In early distributed pub-sub
+topologies, publishing to any node causes that node to broadcast the
+message across an internal cluster bus to every other node in the
+network. Each node then delivers the message to its locally connected
+subscribers. While simple, this approach scales poorly because network
+traffic increases linearly with the number of nodes regardless of
+whether remote nodes have active subscribers.</li>
+<li><strong>Sharded Pub-Sub:</strong> Advanced implementations bind
+pub-sub channels to the database's existing partition hash ring. A
+channel is hashed to a specific slot just like a standard key.
+Publishers and subscribers are routed to the specific node owning that
+hash slot, confining message traffic to the responsible shard and
+eliminating broadcast overhead across the cluster.</li>
+</ul></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/how-key-value-no-sql-stores-implement-pub-sub';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

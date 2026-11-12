@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Model NoSQL: Document, Key-Value, and Graph - nosql</title>
+    <meta name="description" content="Multi-model NoSQL databases combine document, key-value, and graph capabilities by utilizing a unified, underlying storage engine that abstracts multiple data representations into a single architectural framework. Instead of deploying, managing, and synch">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/multi-model-no-sql-document-key-value-and-graph">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Multi-Model NoSQL: Document, Key-Value, and Graph - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/multi-model-no-sql-document-key-value-and-graph" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Multi-model NoSQL databases combine document, key-value, and graph capabilities by utilizing a unified, underlying storage engine that abstracts multiple data representations into a single architectural framework. Instead of deploying, managing, and synch" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="multi-model-nosql-document-key-value-and-graph">Multi-Model
+NoSQL: Document, Key-Value, and Graph</h1>
+<p>Multi-model NoSQL databases combine document, key-value, and graph
+capabilities by utilizing a unified, underlying storage engine that
+abstracts multiple data representations into a single architectural
+framework. Instead of deploying, managing, and synchronizing separate
+specialized databases (polyglot persistence), organizations can use a
+single multi-model engine to store, index, and query distinct data
+structures natively. This article explains the underlying architecture,
+data mapping techniques, unified query execution, and core operational
+benefits that allow these databases to seamlessly merge key-value,
+document, and graph models.</p>
+<h3 id="the-foundation-a-unified-storage-layer">The Foundation: A
+Unified Storage Layer</h3>
+<p>The core of a multi-model database is its storage engine, which
+typically uses a generalized, low-level data primitive—most often an
+optimized key-value store, distributed B-tree, or Log-Structured
+Merge-tree (LSM-tree). Rather than creating separate storage formats for
+each model, the engine treats every piece of data as a variant of this
+low-level format.</p>
+<p>By standardizing physical data blocks, cache hierarchies, and
+write-ahead logs (WAL), the database ensures that whether a payload
+represents an unstructured binary value, a complex JSON document, or an
+edge connecting two graph vertices, it is managed by the exact same
+storage subsystem.</p>
+<h3 id="unifying-key-value-and-document-stores">Unifying Key-Value and
+Document Stores</h3>
+<p>Key-value and document models share a natural architectural
+hierarchy. At its simplest, a document database is an evolved key-value
+store where the "value" is no longer an opaque blob of bytes, but a
+semi-structured payload (such as JSON, BSON, or XML) that the engine can
+parse and inspect.</p>
+<ol type="1">
+<li><strong>Key-Value Execution:</strong> Fast, primary-key lookups
+access data directly using hash tables or index lookups with minimal
+overhead (<span class="math inline">\(O(1)\)</span> or <span
+class="math inline">\(O(\log N)\)</span> access time).</li>
+<li><strong>Document Processing:</strong> When document capabilities are
+invoked, the engine parses the stored structure, builds secondary
+indexes on internal attributes, and allows complex filter queries over
+nested arrays and objects without altering how the record is physically
+persisted.</li>
+</ol>
+<p>Because of this alignment, switching between treating a record as a
+basic key-value entry (retrieving the whole object by ID) and a document
+entry (querying specific inner fields) requires no data migration or
+transformation.</p>
+<h3 id="integrating-the-graph-layer">Integrating the Graph Layer</h3>
+<p>Graph databases rely on vertices (entities), edges (relationships),
+and properties attached to both. Multi-model engines implement graph
+paradigms on top of their document and key-value primitives through
+structured mapping:</p>
+<ul>
+<li><strong>Vertices as Documents:</strong> Each vertex is stored as a
+standard document containing arbitrary properties and a unique
+identifier.</li>
+<li><strong>Edges as Directed References:</strong> Edges are stored
+either as dedicated documents containing origin and target identifiers,
+or as indexed adjacency lists inside the vertex documents
+themselves.</li>
+<li><strong>Index-Free Adjacency Emulation:</strong> Specialized graph
+indexes or in-memory pointer lookups are applied over these documents.
+When a traversal query is executed, the engine follows edge references
+across documents directly, avoiding the computationally heavy relational
+table joins common in traditional databases.</li>
+</ul>
+<p>This design enables a record to function as a self-contained document
+while simultaneously acting as a traversable node in a wider
+network.</p>
+<h3 id="unified-query-processing-and-cross-model-operations">Unified
+Query Processing and Cross-Model Operations</h3>
+<p>The defining feature of a true multi-model database is the ability to
+query across different models within a single query context. The query
+layer accomplishes this through:</p>
+<ul>
+<li><strong>Single Query Languages:</strong> Engines often use a unified
+declarative language (such as AQL in ArangoDB or SQL extensions in
+Cosmos DB and OrientDB) that allows developers to run key lookups,
+filter document properties, and perform recursive graph traversals in a
+single execution plan.</li>
+<li><strong>Unified Cost-Based Optimizers:</strong> The query planner
+analyzes the entire request, determining the optimal execution
+strategy—such as filtering vertices via document secondary indexes first
+to reduce the dataset before triggering an expensive multi-hop graph
+traversal.</li>
+</ul>
+<h3 id="acid-transactions-and-data-consistency">ACID Transactions and
+Data Consistency</h3>
+<p>In traditional architectures combining multiple specialized NoSQL
+engines, maintaining consistency requires complex application-level
+logic or asynchronous ETL pipelines that introduce data latency.</p>
+<p>A unified multi-model engine provides single-system transaction
+management. Because document, key-value, and graph operations occur
+against the same underlying storage engine, the system can apply ACID
+guarantees across models. A single transaction can update a key-value
+counter, modify a document attribute, and create a new graph edge
+atomically, ensuring continuous operational integrity without
+distributed synchronization pipelines.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/multi-model-no-sql-document-key-value-and-graph';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

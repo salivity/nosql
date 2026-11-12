@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NoSQL Index Selectivity on Unstructured Data - nosql</title>
+    <meta name="description" content="Query planners in NoSQL databases face a unique challenge when estimating index selectivity on unstructured and semi-structured fields due to the absence of rigid schemas, dynamic typing, and sparse data distributions. To select the most efficient executi">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/no-sql-index-selectivity-on-unstructured-data">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="NoSQL Index Selectivity on Unstructured Data - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/no-sql-index-selectivity-on-unstructured-data" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Query planners in NoSQL databases face a unique challenge when estimating index selectivity on unstructured and semi-structured fields due to the absence of rigid schemas, dynamic typing, and sparse data distributions. To select the most efficient executi" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="nosql-index-selectivity-on-unstructured-data">NoSQL Index
+Selectivity on Unstructured Data</h1>
+<p>Query planners in NoSQL databases face a unique challenge when
+estimating index selectivity on unstructured and semi-structured fields
+due to the absence of rigid schemas, dynamic typing, and sparse data
+distributions. To select the most efficient execution plan without
+full-collection scans, NoSQL engines rely on dynamic sampling,
+path-aware frequency histograms, probabilistic data sketches, runtime
+execution feedback, and field-existence metrics. This article breaks
+down these primary techniques, explaining how modern document and
+multi-model database planners accurately predict query costs over
+unpredictable data structures.</p>
+<h2 id="dynamic-and-background-sampling">Dynamic and Background
+Sampling</h2>
+<p>Unlike relational databases that maintain static table catalogs,
+NoSQL systems often inspect the underlying data dynamically. Query
+engines employ background workers or on-the-fly reservoir sampling to
+gather a representative subset of documents.</p>
+<p>By analyzing this sample, the planner identifies:</p>
+<ul>
+<li>The frequency of a targeted field across the collection.</li>
+<li>Value distribution ranges (min, max, and quantiles).</li>
+<li>Data type variations within the same field name.</li>
+</ul>
+<p>This statistical snapshot allows the engine to compute a baseline
+selectivity factor for filter predicates without imposing high I/O
+overhead on production workloads.</p>
+<h2 id="path-indexed-histograms-and-tries">Path-Indexed Histograms and
+Tries</h2>
+<p>In unstructured data formats like JSON or BSON, fields often exist at
+arbitrary nesting depths or within variable-length arrays. Query
+planners address this by constructing path-aware histograms using trie
+or prefix-tree data structures.</p>
+<p>Instead of tracking values globally, the database indexes the full
+canonical path (for example, <code>metadata.tags[]</code> or
+<code>order.items.sku</code>). The engine maintains equi-depth or
+equi-width histograms specific to that complete path. When a query
+targets a nested attribute, the planner traverses the path tree to find
+the corresponding value-distribution histogram, yielding a localized
+selectivity estimate that accounts for structural nesting.</p>
+<h2
+id="probabilistic-data-sketches-hyperloglog-and-count-min">Probabilistic
+Data Sketches (HyperLogLog and Count-Min)</h2>
+<p>Storing complete value distributions for sparse, highly variable keys
+consumes excessive memory. Modern NoSQL query planners integrate
+probabilistic data structures (sketches) to estimate selectivity with
+bounded error margins and minimal footprints:</p>
+<ul>
+<li><strong>HyperLogLog (HLL):</strong> Used to compute the cardinality
+(distinct count) of dynamic keys. If an equality predicate targets a
+field with high cardinality relative to the collection size, the planner
+assigns it high selectivity.</li>
+<li><strong>Count-Min Sketch:</strong> Functions as a frequency table to
+detect heavy hitters (frequently occurring values) versus rare values.
+If a query filters on a "heavy hitter," the planner lowers the
+selectivity estimate, potentially favoring a collection scan over an
+index scan.</li>
+</ul>
+<h2 id="field-existence-and-type-distribution-profiling">Field-Existence
+and Type-Distribution Profiling</h2>
+<p>In schemaless models, a query filter implicitly carries an existence
+check; a field might only appear in 5% of all documents. Therefore,
+NoSQL planners decompose selectivity into two distinct
+probabilities:</p>
+<p><span class="math display">\[\text{Selectivity} = P(\text{Field
+Exists}) \times P(\text{Value Matches} \mid \text{Field
+Exists})\]</span></p>
+<p>Planners record metadata regarding the sparsity of a field. If a
+field rarely exists, the index on that field will be highly selective
+regardless of value distribution. Additionally, because fields can hold
+polymorphic types (such as integers in some documents and strings in
+others), planners track the type breakdown. Predicates matching a
+minority type for that field are immediately flagged as highly
+selective.</p>
+<h2 id="adaptive-query-execution-and-feedback-loops">Adaptive Query
+Execution and Feedback Loops</h2>
+<p>When static heuristics fail due to schema drift or skewed data,
+planners rely on runtime feedback loops. When an index scan executes,
+the database engine compares the estimated number of returned documents
+with the actual count observed by the storage engine.</p>
+<p>If the planner significantly under- or over-estimated the
+selectivity, it records this variance in a plan cache. Subsequent query
+compilations targeting the same field or path apply a corrective
+dampening factor to the historical selectivity estimate, allowing the
+planner to self-correct dynamically as data shapes evolve.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/no-sql-index-selectivity-on-unstructured-data';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

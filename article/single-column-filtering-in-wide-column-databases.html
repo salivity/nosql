@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Single-Column Filtering in Wide-Column Databases - nosql</title>
+    <meta name="description" content="Wide-column NoSQL databases avoid full-dataset scans during single-column filtering by utilizing secondary indexing, materialized views, clustering key sorting, and low-level storage optimizations like LSM-tree bloom filters and summary indexes. Rather th">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/single-column-filtering-in-wide-column-databases">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Single-Column Filtering in Wide-Column Databases - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/single-column-filtering-in-wide-column-databases" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Wide-column NoSQL databases avoid full-dataset scans during single-column filtering by utilizing secondary indexing, materialized views, clustering key sorting, and low-level storage optimizations like LSM-tree bloom filters and summary indexes. Rather th" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="single-column-filtering-in-wide-column-databases">Single-Column
+Filtering in Wide-Column Databases</h1>
+<p>Wide-column NoSQL databases avoid full-dataset scans during
+single-column filtering by utilizing secondary indexing, materialized
+views, clustering key sorting, and low-level storage optimizations like
+LSM-tree bloom filters and summary indexes. Rather than inspecting every
+row across distributed nodes, these databases leverage auxiliary data
+structures to pinpoint the exact storage locations of records matching
+the target column's value.</p>
+<h3 id="secondary-indexing-and-storage-attached-indexes">Secondary
+Indexing and Storage-Attached Indexes</h3>
+<p>The most common way to filter on a single non-key column is through
+secondary indexing. Traditional wide-column secondary indexes maintain a
+hidden index table that maps column values directly to the primary
+partition keys containing those values. When a query targets that
+specific column, the database reads the index first to retrieve the
+exact partition keys, bypassing all unrelated partitions.</p>
+<p>Modern engines often use Storage-Attached Indexing (SAI). Instead of
+creating global distributed index tables, SAI creates localized inverted
+indexes directly attached to individual SSTables (Sorted String Tables)
+on disk. These indexes use structures like block-based inverted lists,
+bit-indexed tries, or k-d trees. When a query arrives, the database
+references the SAI metadata to evaluate the single column and loads only
+the specific data blocks containing matching rows.</p>
+<h3 id="partitioning-and-clustering-key-layouts">Partitioning and
+Clustering Key Layouts</h3>
+<p>Wide-column stores structure data hierarchically using partition keys
+and clustering keys. When the column being filtered is designated as a
+clustering key, broad scans are entirely eliminated by design.</p>
+<p>Data within a single partition is stored on disk in sorted order
+based on the clustering keys. To execute a single-column filter against
+a clustering column, the database locates the partition via hash routing
+and performs a binary search or offset seek directly on the sorted
+SSTable file. The engine reads only the contiguous slice of disk blocks
+matching the predicate, ignoring the rest of the partition.</p>
+<h3 id="materialized-views">Materialized Views</h3>
+<p>For high-throughput read workloads where native secondary indexing
+adds too much query latency, wide-column systems employ materialized
+views. A materialized view duplicates the underlying data but
+restructures the primary key so that the filtered column becomes the
+view's partition key.</p>
+<p>When an application queries the materialized view using the target
+column, the database hashes the column value to route the request
+directly to the exact replica nodes holding that partition. This
+transforms an arbitrary column filter into an <span
+class="math inline">\(O(1)\)</span> partition lookup with zero scanning
+overhead.</p>
+<h3 id="sstable-metadata-min-max-trackers-and-bloom-filters">SSTable
+Metadata, Min-Max Trackers, and Bloom Filters</h3>
+<p>At the storage layer, wide-column engines rely on Log-Structured
+Merge-trees (LSM-trees). Within this architecture, data is periodically
+flushed to immutable SSTable files. To prevent scanning files that do
+not contain the target data, the database uses low-level file
+metadata:</p>
+<ul>
+<li><strong>Min/Max Metadata:</strong> SSTables record the minimum and
+maximum values present in each column within that file or block. If the
+filtered value falls outside this range, the entire SSTable or block is
+skipped.</li>
+<li><strong>Bloom Filters:</strong> Probabilistic data structures
+quickly verify whether a given key or indexed value definitely does not
+exist in an SSTable, preventing unnecessary disk I/O.</li>
+<li><strong>Row and Column Offsets:</strong> Summary files contain
+offset markers, allowing the read head to seek directly to matching byte
+positions rather than streaming sequential data.</li>
+</ul></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/single-column-filtering-in-wide-column-databases';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resource Allocation in NoSQL Background Compaction - nosql</title>
+    <meta name="description" content="This article examines how distributed NoSQL databases prevent background data compaction from degrading read and write performance. It explores core mechanisms including I/O rate limiting, isolated thread pools, memory-cache bypassing, dynamic resource sc">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/resource-allocation-in-no-sql-background-compaction">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Resource Allocation in NoSQL Background Compaction - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/resource-allocation-in-no-sql-background-compaction" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article examines how distributed NoSQL databases prevent background data compaction from degrading read and write performance. It explores core mechanisms including I/O rate limiting, isolated thread pools, memory-cache bypassing, dynamic resource sc" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="resource-allocation-in-nosql-background-compaction">Resource
+Allocation in NoSQL Background Compaction</h1>
+<p>This article examines how distributed NoSQL databases prevent
+background data compaction from degrading read and write performance. It
+explores core mechanisms including I/O rate limiting, isolated thread
+pools, memory-cache bypassing, dynamic resource scheduling, and strategy
+selection. By balancing system maintenance with incoming traffic
+demands, modern NoSQL systems maintain strict latency service-level
+objectives (SLOs) even under write-heavy workloads.</p>
+<h3 id="the-compaction-dilemma-in-lsm-tree-databases">The Compaction
+Dilemma in LSM-Tree Databases</h3>
+<p>Most write-optimized NoSQL databases—such as Apache Cassandra,
+ScyllaDB, RocksDB, and Google Cloud Bigtable—utilize Log-Structured
+Merge-trees (LSM-trees). Writes are appended sequentially to an
+in-memory buffer (MemTable) and periodically flushed to immutable disk
+files (SSTables).</p>
+<p>Over time, multiple SSTables accumulate, creating duplicate keys,
+obsolete records, and deletion markers (tombstones). Background
+compaction reads multiple SSTables, merges and sorts the data, drops
+stale keys, and writes clean, consolidated files. While critical for
+maintaining fast read performance and reclaiming disk space, this
+process consumes significant CPU, disk I/O, and memory bandwidth,
+potentially starving user-facing queries.</p>
+<h3 id="io-throttling-and-rate-limiting">I/O Throttling and Rate
+Limiting</h3>
+<p>To prevent background merge operations from saturating storage
+subsystems, databases implement strict I/O throughput limits:</p>
+<ul>
+<li><strong>Token Bucket Algorithms:</strong> Systems like RocksDB and
+Apache Cassandra use token bucket limiters to meter compaction write
+speeds. Administrators or automated systems assign a compaction
+throughput cap (for example, limiting compaction writes to 64 MB/s per
+node).</li>
+<li><strong>Write Burst Handling:</strong> By defining maximum burst
+sizes, systems ensure that temporary spikes in compaction activity do
+not overwhelm the underlying SSD or NVMe drives, preserving random-read
+IOPS for live user queries.</li>
+</ul>
+<h3 id="thread-isolation-and-os-prioritization">Thread Isolation and OS
+Prioritization</h3>
+<p>NoSQL architectures isolate compaction workloads from client
+read/write pipelines using multi-threading and process-priority
+controls:</p>
+<ul>
+<li><strong>Separated Thread Pools:</strong> Work is segregated across
+dedicated thread pools. Incoming client requests execute on
+high-priority request pools, while compaction tasks run in low-priority
+worker pools.</li>
+<li><strong>CPU Nice Levels and Scheduling:</strong> Background
+compaction threads can be assigned higher <code>nice</code> values at
+the OS level, instructing the Linux kernel scheduler to yield CPU cycles
+to query-processing threads whenever a scheduling conflict occurs.</li>
+<li><strong>Core-Per-Thread Partitioning:</strong> Modern C++-based
+architectures (such as ScyllaDB, built on the Seastar framework)
+dedicate CPU cores to specific shards. Inside each shard, a user-space
+scheduler dynamically allocates a specific percentage of execution time
+(shares) to compaction versus request processing.</li>
+</ul>
+<h3 id="dynamic-resource-scheduling">Dynamic Resource Scheduling</h3>
+<p>Static rate limits often underutilize hardware during off-peak hours
+and fail to react fast enough during sudden traffic surges. Dynamic
+schedulers resolve this trade-off:</p>
+<ul>
+<li><strong>Latency-Aware Throttling:</strong> The database monitors
+client request latency. If read or write latencies breach defined
+thresholds (for instance, p99 latency exceeding 10ms), the engine
+automatically reduces compaction thread concurrency and lowers I/O
+limits.</li>
+<li><strong>Compaction Backlog Monitoring:</strong> If writes outpace
+compaction, the system faces "read amplification" or disk exhaustion.
+Dynamic engines continuously evaluate the compaction backlog; during
+periods of low client activity, they automatically scale up compaction
+limits to clear pending tasks quickly.</li>
+</ul>
+<h3 id="memory-isolation-and-cache-protection">Memory Isolation and
+Cache Protection</h3>
+<p>Compaction processes large volumes of cold, historical data that
+should not interfere with active database caches:</p>
+<ul>
+<li><strong>Bypassing the OS Page Cache:</strong> Heavy sequential reads
+and writes during compaction can flush hot, frequently read pages out of
+the operating system’s page cache. Engines use flags such as
+<code>O_DIRECT</code> or POSIX cache hints (<code>posix_fadvise</code>
+with <code>POSIX_FADV_DONTNEED</code>) to stream compaction data without
+evicting cached application data.</li>
+<li><strong>Isolated Merge Buffers:</strong> Memory required for sorting
+and merging SSTables is allocated from distinct buffers separate from
+the read-cache (Row Cache, Key Cache) and write-cache (MemTables),
+preventing out-of-memory (OOM) errors during heavy merge phases.</li>
+</ul>
+<h3 id="workload-specific-compaction-strategies">Workload-Specific
+Compaction Strategies</h3>
+<p>Resource allocation also depends on choosing the compaction algorithm
+tailored to the access pattern:</p>
+<ul>
+<li><strong>Size-Tiered Compaction Strategy (STCS):</strong> Merges
+SSTables of similar sizes. It uses low CPU and disk resources during
+ingestion but triggers large, resource-intensive compaction events when
+merging huge files.</li>
+<li><strong>Leveled Compaction Strategy (LCS):</strong> Divides data
+into hierarchical levels with strict size limits. It imposes constant,
+predictable background I/O overhead to maintain high read
+efficiency.</li>
+<li><strong>Time-Window Compaction Strategy (TWCS):</strong> Designed
+for time-series data, TWCS only compacts data within a designated time
+window. Once a time window closes, the SSTables are never compacted
+again, reducing compaction resource consumption to near zero for
+historical records.</li>
+</ul></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/resource-allocation-in-no-sql-background-compaction';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

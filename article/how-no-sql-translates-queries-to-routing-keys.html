@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How NoSQL Translates Queries to Routing Keys - nosql</title>
+    <meta name="description" content="Distributed NoSQL databases rely on horizontal partitioning to scale, requiring the system to map high-level developer queries to specific storage nodes holding the target data. When a developer executes an abstract query—such as an equality filter in a d">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/how-no-sql-translates-queries-to-routing-keys">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How NoSQL Translates Queries to Routing Keys - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/how-no-sql-translates-queries-to-routing-keys" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Distributed NoSQL databases rely on horizontal partitioning to scale, requiring the system to map high-level developer queries to specific storage nodes holding the target data. When a developer executes an abstract query—such as an equality filter in a d" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-nosql-translates-queries-to-routing-keys">How NoSQL
+Translates Queries to Routing Keys</h1>
+<p>Distributed NoSQL databases rely on horizontal partitioning to scale,
+requiring the system to map high-level developer queries to specific
+storage nodes holding the target data. When a developer executes an
+abstract query—such as an equality filter in a document, key-value, or
+wide-column store—the database's query layer decomposes the statement,
+identifies the designated partition key attributes, converts those
+values into a canonical binary form, and computes a partition routing
+token. This article details the step-by-step mechanism query layers use
+to transform declarative developer inputs into physical network routing
+decisions.</p>
+<h3 id="1-abstract-syntax-tree-ast-parsing">1. Abstract Syntax Tree
+(AST) Parsing</h3>
+<p>The process begins when the query engine receives an abstract query
+via an API or query language (such as CQL, PartiQL, or MongoDB Query
+Language). The parser converts the raw query string or JSON payload into
+an Abstract Syntax Tree (AST). This tree models the query's logical
+operations, specifically isolating the target collection or table,
+projected fields, and conditional predicates inside <code>WHERE</code>
+or filter clauses.</p>
+<h3 id="2-schema-and-metadata-resolution">2. Schema and Metadata
+Resolution</h3>
+<p>Once the AST is formed, the query planner consults the database's
+local metadata cache to inspect the schema definition for the target
+collection. The metadata defines which specific attributes constitute
+the partition key (often called a hash key or shard key). For composite
+keys, the schema specifies the exact order and types of fields required
+to compute the partition identity.</p>
+<h3 id="3-predicate-extraction-and-key-isolation">3. Predicate
+Extraction and Key Isolation</h3>
+<p>The query layer inspects the AST's filter conditions to extract
+values assigned to the partition key fields.</p>
+<ul>
+<li><strong>Exact Match (Point Lookup):</strong> If the query provides
+an equality comparison (e.g., <code>WHERE tenant_id = '123'</code>) for
+all partition key components, the engine isolates these values for key
+generation.</li>
+<li><strong>Missing or Partial Key (Scatter-Gather):</strong> If the
+partition key fields are absent or use non-deterministic operators (such
+as inequalities or wildcards), the query layer cannot generate a single
+routing key. In this scenario, the engine flags the query for a
+broadcast or "scatter-gather" execution, dispatching requests across all
+cluster nodes instead of performing targeted routing.</li>
+</ul>
+<h3 id="4-canonical-serialization">4. Canonical Serialization</h3>
+<p>Before computing a physical routing token, extracted values must be
+normalized. Because different programming languages and serialization
+formats can represent the same data differently, the query layer
+serializes partition key values into a deterministic byte array. This
+involves:</p>
+<ul>
+<li>Enforcing canonical type representations (e.g., standardizing text
+encoding to UTF-8, normalizing integers to big-endian bytes).</li>
+<li>Delimiting and concatenating composite key attributes in the exact
+sequence specified by the schema to avoid collision between adjacent
+string fields.</li>
+</ul>
+<h3 id="5-hash-token-generation">5. Hash Token Generation</h3>
+<p>With a standardized byte array prepared, the engine applies a
+deterministic, non-cryptographic hashing algorithm designed for uniform
+distribution. Commonly used algorithms include Murmur3, CityHash, or
+MD5. The hashing function converts the byte sequence into a fixed-width
+integer or token (such as a 64-bit or 128-bit signed integer) that
+uniquely represents the partition.</p>
+<h3 id="6-node-routing-via-topology-maps">6. Node Routing via Topology
+Maps</h3>
+<p>Finally, the generated token is mapped to the physical cluster.
+Distributed NoSQL databases maintain an in-memory cluster topology
+map—frequently organized as a consistent hashing ring (as seen in Apache
+Cassandra or DynamoDB-style systems) or a range-based shard catalog (as
+seen in MongoDB or Google Cloud Bigtable).</p>
+<p>The query layer compares the computed token against the token ranges
+assigned to the cluster's nodes:</p>
+<ul>
+<li><strong>Consistent Hashing:</strong> The engine identifies the first
+node whose assigned token range covers the computed query token, along
+with secondary nodes if a replication factor greater than one is
+defined.</li>
+<li><strong>Range Slicing:</strong> The engine performs a binary search
+over shard boundary ranges to identify the designated primary
+shard.</li>
+</ul>
+<p>Once the target node's IP address and port are resolved, the query
+layer translates the abstract operation into a low-level remote
+procedure call (RPC) or internal storage command, dispatching the
+request directly to the storage engine hosting the partition.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/how-no-sql-translates-queries-to-routing-keys';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

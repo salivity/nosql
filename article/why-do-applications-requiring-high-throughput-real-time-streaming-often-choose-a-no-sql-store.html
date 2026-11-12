@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Why Do Applications Requiring High-Throughput Real-Time Streaming Often Choose a NoSQL Store? - nosql</title>
+    <meta name="description" content="Applications handling real-time data streams—such as Internet of Things (IoT) sensor networks, financial ticker processing, live clickstream analytics, and gaming telemetry—demand write speeds and throughput that traditional relational database management">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/why-do-applications-requiring-high-throughput-real-time-streaming-often-choose-a-no-sql-store">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Why Do Applications Requiring High-Throughput Real-Time Streaming Often Choose a NoSQL Store? - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/why-do-applications-requiring-high-throughput-real-time-streaming-often-choose-a-no-sql-store" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Applications handling real-time data streams—such as Internet of Things (IoT) sensor networks, financial ticker processing, live clickstream analytics, and gaming telemetry—demand write speeds and throughput that traditional relational database management" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1
+id="why-do-applications-requiring-high-throughput-real-time-streaming-often-choose-a-nosql-store">Why
+Do Applications Requiring High-Throughput Real-Time Streaming Often
+Choose a NoSQL Store?</h1>
+<p>Applications handling real-time data streams—such as Internet of
+Things (IoT) sensor networks, financial ticker processing, live
+clickstream analytics, and gaming telemetry—demand write speeds and
+throughput that traditional relational database management systems
+(RDBMS) struggle to sustain. To maintain low-latency ingest and smooth
+execution under massive concurrent workloads, architecture teams
+frequently select NoSQL stores. This preference stems from the distinct
+structural and operational advantages non-relational architectures bring
+to real-time ingestion pipelines.</p>
+<h2 id="horizontal-scalability-and-distributed-architecture">Horizontal
+Scalability and Distributed Architecture</h2>
+<p>Traditional relational databases primarily rely on vertical scaling
+(adding more CPU, RAM, or storage to a single server). In
+high-throughput streaming scenarios where thousands or millions of
+events enter the pipeline every second, single-node systems quickly
+encounter severe hardware bounds.</p>
+<p>NoSQL databases are built ground-up for horizontal scaling (scaling
+out) across distributed clusters of commodity servers. Using techniques
+like native sharding and consistent hashing, incoming data streams are
+automatically partitioned and distributed across multiple nodes. When
+throughput requirements grow, engineers can expand total system capacity
+and network bandwidth seamlessly by adding nodes to the cluster, often
+without downtime.</p>
+<h2 id="simplified-data-models-and-schema-flexibility">Simplified Data
+Models and Schema Flexibility</h2>
+<p>Real-time streams frequently deliver semi-structured or unstructured
+data (such as JSON payloads, log strings, or key-value pairs) whose
+attributes change over time. Relational databases enforce strict data
+schemas, requiring transactional table locks or alter schema migrations
+when data models evolve.</p>
+<p>NoSQL data stores—including key-value, document, and wide-column
+models—operate with dynamic or schema-less structures. Incoming events
+can be written directly without dynamic translation overhead or
+predefined column constraints. This flexibility allows stream producers
+to publish updated event schemas immediately without introducing ingest
+latencies or pipeline stalls.</p>
+<h2 id="high-write-performance-and-elimination-of-join-overhead">High
+Write Performance and Elimination of Join Overhead</h2>
+<p>Relational databases maintain strong ACID guarantees (Atomicity,
+Consistency, Isolation, Durability) across normalized tables. While
+crucial for applications like ledger accounting, enforcing strict global
+lock management, write-ahead logging across relations, and complex index
+updating slows down write performance significantly.</p>
+<p>NoSQL stores prioritize rapid write execution over complex relational
+queries. By denormalizing data and avoiding multi-table joins, a NoSQL
+store reduces write path complexity to direct append operations or
+single-entity lookups. Many NoSQL systems leverage log-structured
+merge-trees (LSM trees) or memory-first storage engines (such as
+in-memory caches) to convert random disk writes into sequential disk
+writes, yielding sub-millisecond latencies for write-heavy streaming
+operations.</p>
+<h2 id="flexible-consistency-trade-offs">Flexible Consistency
+Trade-Offs</h2>
+<p>Under the CAP theorem (Consistency, Availability, Partition
+Tolerance), distributed databases must choose how to respond to network
+partitions. Real-time streaming platforms usually emphasize high
+availability and fast ingestion over instantaneous global
+consistency.</p>
+<p>Most NoSQL stores adopt an eventual consistency model or offer
+tunable consistency configurations. In high-volume event logging or
+metric aggregation, losing a single data point or experiencing a brief
+delay in global replica synchronization is far less damaging than
+rejecting incoming writes entirely. By relaxing strict multi-node
+locking protocols during writes, NoSQL engines process high-velocity
+data flows smoothly without blocking stream processing threads.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/why-do-applications-requiring-high-throughput-real-time-streaming-often-choose-a-no-sql-store';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

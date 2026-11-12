@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stream Processing with NoSQL Transaction Logs - nosql</title>
+    <meta name="description" content="Modern data architectures increasingly integrate stream processing frameworks directly with distributed NoSQL transaction logs to capture and process operational data changes in real time. This article explores the technical and operational reasons behind">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/stream-processing-with-no-sql-transaction-logs">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Stream Processing with NoSQL Transaction Logs - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/stream-processing-with-no-sql-transaction-logs" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Modern data architectures increasingly integrate stream processing frameworks directly with distributed NoSQL transaction logs to capture and process operational data changes in real time. This article explores the technical and operational reasons behind" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="stream-processing-with-nosql-transaction-logs">Stream Processing
+with NoSQL Transaction Logs</h1>
+<p>Modern data architectures increasingly integrate stream processing
+frameworks directly with distributed NoSQL transaction logs to capture
+and process operational data changes in real time. This article explores
+the technical and operational reasons behind this native integration,
+highlighting how it enables low-latency event-driven pipelines,
+guarantees data consistency, prevents performance degradation on
+transactional workloads, and simplifies complex real-time analytics.</p>
+<h3 id="change-data-capture-without-performance-penalties">Change Data
+Capture Without Performance Penalties</h3>
+<p>Connecting directly to a NoSQL database's transaction log—often
+referred to as an append-only commit log, write-ahead log (WAL), or
+oplog—allows stream processors to implement Change Data Capture (CDC)
+natively. Instead of relying on periodic polling queries that scan
+tables and consume database I/O, the stream engine reads the immutable
+sequence of modifications directly from storage. This approach ensures
+zero impact on primary read and write latencies for production
+applications, isolating analytical and operational workloads
+efficiently.</p>
+<h3 id="preservation-of-total-and-partitioned-ordering">Preservation of
+Total and Partitioned Ordering</h3>
+<p>Stream processing requires strict event ordering to ensure accurate
+state calculations, event-time windowing, and session tracking.
+Distributed NoSQL databases organize data across shards or partitions,
+writing updates sequentially to partition-specific logs. Native
+connectors allow stream processors to map their internal worker
+partitions one-to-one with the NoSQL database shards. This structural
+parity guarantees that mutations targeting the same key arrive at the
+processing engine in the exact order they occurred.</p>
+<h3 id="deterministic-fault-tolerance-and-replayability">Deterministic
+Fault Tolerance and Replayability</h3>
+<p>Distributed transaction logs function as immutable, persistent
+ledgers. Because the log retains offsets for every written record,
+stream processing frameworks can implement checkpointing mechanisms and
+track consumer offsets reliably. If a worker node crashes or a
+downstream sink experiences downtime, the stream processor resumes
+reading from the last committed offset. This persistence model provides
+the foundation for at-least-once or exactly-once processing guarantees
+without requiring duplicate message tracking at the application
+layer.</p>
+<h3 id="elimination-of-batch-etl-latency">Elimination of Batch ETL
+Latency</h3>
+<p>Traditional data architectures rely on scheduled batch jobs to
+extract data from operational stores into data warehouses, introducing
+hours or days of latency. Native connections between stream processors
+and transaction logs turn database writes directly into actionable data
+feeds. As soon as a transaction commits, it enters the stream pipeline,
+enabling instantaneous materialized view updates, real-time fraud
+detection, search index synchronization, and live notification
+delivery.</p>
+<h3 id="decoupling-microservices-and-downstream-consumers">Decoupling
+Microservices and Downstream Consumers</h3>
+<p>Exposing transaction logs to stream processing frameworks converts
+the database into an event source for decoupled architectures.
+Downstream microservices can subscribe to the processed event streams
+rather than directly querying the core database. This pattern prevents
+tight database coupling, avoids cascading failures across systems, and
+allows independent scaling of consumers based on downstream processing
+requirements.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/stream-processing-with-no-sql-transaction-logs';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

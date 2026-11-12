@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Distributed Locks Work in NoSQL Environments - nosql</title>
+    <meta name="description" content="This article explores how distributed lock managers (DLMs) operate within NoSQL architectures to coordinate concurrent processes across decentralized systems. It examines the foundational challenges posed by eventual consistency and partition tolerance, t">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/how-distributed-locks-work-in-no-sql-environments">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Distributed Locks Work in NoSQL Environments - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/how-distributed-locks-work-in-no-sql-environments" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explores how distributed lock managers (DLMs) operate within NoSQL architectures to coordinate concurrent processes across decentralized systems. It examines the foundational challenges posed by eventual consistency and partition tolerance, t" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-distributed-locks-work-in-nosql-environments">How
+Distributed Locks Work in NoSQL Environments</h1>
+<p>This article explores how distributed lock managers (DLMs) operate
+within NoSQL architectures to coordinate concurrent processes across
+decentralized systems. It examines the foundational challenges posed by
+eventual consistency and partition tolerance, the technical mechanisms
+used to establish locks—such as conditional writes and time-to-live
+leases—and strategies like fencing tokens and consensus protocols to
+prevent split-brain states and race conditions.</p>
+<h3 id="the-challenge-of-locking-in-nosql">The Challenge of Locking in
+NoSQL</h3>
+<p>Traditional relational database management systems rely on
+centralized lock managers and strict ACID transactions to ensure that
+only one process accesses a resource at a time. NoSQL databases, by
+contrast, frequently trade immediate consistency for high availability
+and horizontal scalability, following BASE principles (Basically
+Available, Soft state, Eventual consistency).</p>
+<p>Because data is partitioned and replicated across multiple nodes,
+establishing mutual exclusion is difficult. A failure in network
+connectivity or a delay in replication can easily cause two independent
+processes to assume they own the same lock simultaneously. Consequently,
+distributed locking in NoSQL environments relies on specialized
+mechanisms to simulate or enforce strong consistency boundaries.</p>
+<h3 id="atomic-primitives-and-conditional-writes">Atomic Primitives and
+Conditional Writes</h3>
+<p>Distributed locking in NoSQL environments begins with atomic
+primitives. To obtain a lock, a client must be able to test a condition
+and set a value in a single, uninterruptible operation. Common patterns
+include:</p>
+<ul>
+<li><strong>Compare-And-Swap (CAS) / Conditional Puts:</strong>
+Databases like Apache Cassandra (via Lightweight Transactions using
+Paxos) and Amazon DynamoDB (via Conditional Writes) allow a client to
+write a lock record only if it does not already exist, or if its version
+matches an expected value.</li>
+<li><strong>Key-Value Flags:</strong> In memory-first NoSQL stores like
+Redis, commands such as
+<code>SET resource_name my_random_value NX PX 30000</code> set the key
+only if it does not already exist (<code>NX</code>), while automatically
+applying an expiration time (<code>PX</code>).</li>
+</ul>
+<p>If the write succeeds, the client holds the lock. If the operation
+fails because the key or record already exists, another process holds
+the lock, and the requesting client must either back off and retry or
+fail immediately.</p>
+<h3 id="preventing-deadlocks-leases-and-ttls">Preventing Deadlocks:
+Leases and TTLs</h3>
+<p>A distributed lock must never block execution indefinitely if a
+client crashes or encounters a network partition while holding a lock.
+To solve this, NoSQL distributed locks use leases governed by a
+Time-to-Live (TTL).</p>
+<ol type="1">
+<li><strong>Acquisition with Expiry:</strong> When a lock is granted,
+the database assigns it a strict TTL.</li>
+<li><strong>Heartbeating:</strong> If the process holding the lock takes
+longer than anticipated, a background thread must periodically extend
+the lease before the TTL expires.</li>
+<li><strong>Automatic Eviction:</strong> If the node crashes or loses
+network connectivity, the TTL elapses without renewal, and the database
+automatically purges the lock record, allowing other clients to claim
+it.</li>
+</ol>
+<h3 id="the-risk-of-clock-drift-and-asynchronous-pauses">The Risk of
+Clock Drift and Asynchronous Pauses</h3>
+<p>Relying entirely on TTLs introduces subtle concurrency bugs. In
+distributed environments, long garbage collection (GC) pauses, CPU
+starvation, or network latency can cause a process to lose track of
+time. A client might execute an action believing it still owns the lock,
+while the NoSQL database has already expired the lease and granted it to
+another worker.</p>
+<p>To mitigate this, DLMs implement <strong>fencing tokens</strong>. A
+fencing token is a monotonically increasing counter associated with the
+lock:</p>
+<ol type="1">
+<li>Every time a lock is acquired, the counter increments (e.g., Lock
+Token = 101).</li>
+<li>The client must include this token in any subsequent write operation
+to the underlying storage system.</li>
+<li>The storage engine rejects any incoming write request that includes
+a token lower than the highest token it has already processed.</li>
+</ol>
+<p>Even if an old client wakes up from a long pause and attempts to
+finish its work, the storage system detects the stale token and rejects
+the write.</p>
+<h3 id="consensus-protocols-and-dedicated-coordinators">Consensus
+Protocols and Dedicated Coordinators</h3>
+<p>While some NoSQL databases handle distributed locks natively using
+internal consensus protocols (like Paxos or Raft applied to internal
+metadata partitions), many enterprise systems offload lock management to
+purpose-built distributed configuration stores, such as etcd, Consul, or
+Apache ZooKeeper.</p>
+<p>These dedicated coordinators provide strong serializability and
+linearizability out of the box. They maintain active sessions via
+heartbeats; if a client disconnects, its associated ephemeral nodes are
+cleaned up immediately without relying strictly on client-side time
+tracking.</p>
+<p>For setups operating purely on distributed key-value stores without a
+consensus-backed master, algorithms like <strong>Redlock</strong> exist.
+Redlock works by requiring a client to acquire locks from multiple
+independent NoSQL nodes (a quorum) within a specific timeframe. The lock
+is only considered valid if a majority of instances grant it, minimizing
+single-point-of-failure risks.</p>
+<h3 id="summary-of-operation">Summary of Operation</h3>
+<p>A distributed lock manager in a NoSQL environment fundamentally
+operates as a coordinated balance of three elements:</p>
+<ol type="1">
+<li><strong>Atomic write operations</strong> that resolve race
+conditions at the storage tier.</li>
+<li><strong>Time-bounded leases</strong> that ensure eventual system
+progress after client failures.</li>
+<li><strong>Monotonic verification (fencing tokens)</strong> to protect
+data integrity against latency-induced race conditions.</li>
+</ol></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/how-distributed-locks-work-in-no-sql-environments';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

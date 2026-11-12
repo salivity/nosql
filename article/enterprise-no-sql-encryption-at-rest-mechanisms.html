@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enterprise NoSQL Encryption at Rest Mechanisms - nosql</title>
+    <meta name="description" content="Enterprise NoSQL databases implement data encryption at rest to protect inactive data stored on physical disks, backups, and storage arrays from unauthorized access. This article examines the primary mechanisms that enable robust encryption at rest across">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/enterprise-no-sql-encryption-at-rest-mechanisms">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Enterprise NoSQL Encryption at Rest Mechanisms - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/enterprise-no-sql-encryption-at-rest-mechanisms" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Enterprise NoSQL databases implement data encryption at rest to protect inactive data stored on physical disks, backups, and storage arrays from unauthorized access. This article examines the primary mechanisms that enable robust encryption at rest across" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="enterprise-nosql-encryption-at-rest-mechanisms">Enterprise NoSQL
+Encryption at Rest Mechanisms</h1>
+<p>Enterprise NoSQL databases implement data encryption at rest to
+protect inactive data stored on physical disks, backups, and storage
+arrays from unauthorized access. This article examines the primary
+mechanisms that enable robust encryption at rest across modern NoSQL
+platforms, including native storage engine encryption, cryptographic key
+management systems, filesystem-level solutions, and client-side
+field-level controls.</p>
+<h3
+id="native-database-engine-encryption-transparent-data-encryption">Native
+Database Engine Encryption (Transparent Data Encryption)</h3>
+<p>Most enterprise-grade NoSQL databases—such as MongoDB Enterprise,
+Apache Cassandra, and Couchbase—provide built-in, native storage engine
+encryption, frequently referred to as Transparent Data Encryption
+(TDE).</p>
+<p>Under this model:</p>
+<ul>
+<li><strong>Storage-Level Interception:</strong> The database storage
+engine (e.g., MongoDB's WiredTiger) encrypts data pages immediately
+before writing them to disk and decrypts them when read into system
+memory.</li>
+<li><strong>Coverage Scope:</strong> This process protects primary table
+data, secondary indexes, write-ahead logs (WAL), commit logs, and
+temporary scratch files.</li>
+<li><strong>Standard Algorithms:</strong> Engines universally rely on
+industry-standard symmetric ciphers, predominantly AES-256 in Cipher
+Block Chaining (CBC) or Galois/Counter Mode (GCM), ensuring regulatory
+compliance with standards like PCI-DSS and HIPAA without requiring
+schema or query modifications.</li>
+</ul>
+<h3 id="envelope-encryption-and-key-management-architecture">Envelope
+Encryption and Key Management Architecture</h3>
+<p>Enterprise solutions rely on envelope encryption to protect both the
+data and the encryption keys themselves, preventing single-point
+cryptographic failures.</p>
+<ul>
+<li><strong>Two-Tier Key Hierarchy:</strong> Data is encrypted using a
+locally generated Data Encryption Key (DEK). The DEK is then encrypted
+(wrapped) using a Master Encryption Key (MEK) or Key Encryption Key
+(KEK).</li>
+<li><strong>Key Separation:</strong> DEKs remain near the storage layer,
+whereas MEKs are stored strictly outside the database environment.</li>
+<li><strong>KMIP and Cloud KMS Integration:</strong> Enterprises utilize
+external Key Management Services (KMS)—such as AWS KMS, Google Cloud
+KMS, Azure Key Vault, or HashiCorp Vault—via the Key Management
+Interoperability Protocol (KMIP). When the database boots, it
+authenticates with the external KMS to unwrap the DEK in memory. The MEK
+never leaves the secure boundaries of the external key manager.</li>
+</ul>
+<h3 id="operating-system-and-storage-level-encryption">Operating System
+and Storage-Level Encryption</h3>
+<p>When native engine-level encryption is not implemented, or when a
+defense-in-depth posture is required, organizations deploy encryption
+below the database process layer.</p>
+<ul>
+<li><strong>Filesystem-Level Encryption:</strong> Tools such as Linux
+Unified Key Setup (LUKS) or <code>dm-crypt</code> operate within the
+operating system kernel to encrypt the underlying block devices hosting
+NoSQL data directories.</li>
+<li><strong>Managed Cloud Storage:</strong> In managed cloud NoSQL
+instances (such as Amazon DynamoDB or Azure Cosmos DB), cloud providers
+enforce hardware-level storage volume encryption by default using
+transparent block-level encryption on the underlying storage
+infrastructure.</li>
+<li><strong>Self-Encrypting Drives (SEDs):</strong> Hardware-based
+solutions rely on storage drives with embedded cryptographic processors
+to encrypt all data entering the drive at the controller level,
+introducing near-zero performance overhead to the database engine.</li>
+</ul>
+<h3 id="client-side-and-field-level-encryption-fle">Client-Side and
+Field-Level Encryption (FLE)</h3>
+<p>For sensitive workloads, field-level encryption shifts the
+cryptographic boundary directly to the client application before
+transmission to the database.</p>
+<ul>
+<li><strong>Deterministic vs. Randomized Encryption:</strong>
+Deterministic encryption allows basic equality queries on encrypted
+fields, whereas randomized encryption provides maximum cryptographic
+strength for data that does not need to be queried directly.</li>
+<li><strong>Zero-Knowledge Architecture:</strong> Because fields are
+encrypted by the database driver running on the application server, the
+database engine, administrators, and storage mediums have no access to
+the plaintext data or the decryption keys, fully insulating sensitive
+fields from host-level compromises.</li>
+</ul></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/enterprise-no-sql-encryption-at-rest-mechanisms';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

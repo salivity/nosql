@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Indexing Edge Properties in Graph NoSQL Databases - nosql</title>
+    <meta name="description" content="Graph NoSQL databases model rich domains by assigning key-value attributes not just to nodes, but directly to the edges connecting them. To query these edge properties efficiently without scanning the entire graph, modern graph platforms implement special">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/indexing-edge-properties-in-graph-no-sql-databases">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Indexing Edge Properties in Graph NoSQL Databases - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/indexing-edge-properties-in-graph-no-sql-databases" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Graph NoSQL databases model rich domains by assigning key-value attributes not just to nodes, but directly to the edges connecting them. To query these edge properties efficiently without scanning the entire graph, modern graph platforms implement special" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="indexing-edge-properties-in-graph-nosql-databases">Indexing Edge
+Properties in Graph NoSQL Databases</h1>
+<p>Graph NoSQL databases model rich domains by assigning key-value
+attributes not just to nodes, but directly to the edges connecting them.
+To query these edge properties efficiently without scanning the entire
+graph, modern graph platforms implement specialized indexing strategies
+ranging from global secondary indexes to edge-aware adjacency lists and
+integrated search engines. This article examines the underlying
+mechanisms graph databases use to index, store, and quickly retrieve
+property attributes attached to graph edges.</p>
+<h3 id="the-challenge-of-edge-property-indexing">The Challenge of Edge
+Property Indexing</h3>
+<p>In labeled property graphs, edges (or relationships) represent
+directed connections between vertices that also hold metadata, such as
+weights, timestamps, or relationship types. While traditional graph
+traversal relies on "index-free adjacency"—where vertices directly
+reference their incident edges via memory or disk pointers—traversals
+frequently require filtering by edge properties (e.g., finding all
+<code>TRANSFERRED</code> edges where <code>amount &gt; 10000</code>).
+Without indexing on these properties, the engine would have to perform
+full relationship scans across the entire database or inspect every edge
+attached to a node, creating significant I/O bottlenecks.</p>
+<h3 id="global-secondary-indexes-on-edges">Global Secondary Indexes on
+Edges</h3>
+<p>Most graph engines (such as Neo4j, TigerGraph, or JanusGraph)
+implement global secondary indexes for relationship properties.</p>
+<ul>
+<li><strong>B-Trees and B+ Trees:</strong> Often used for range queries
+and exact lookups (e.g., timestamps or numerical weights). The tree
+index maps the edge property value to a set of internal edge IDs. When
+an edge-filtered query executes, the engine queries the B-Tree to
+retrieve matching edge identifiers, which are then resolved to their
+source and target vertices.</li>
+<li><strong>Log-Structured Merge-Trees (LSM-Trees):</strong> Used by
+graph systems layered over distributed key-value stores (such as
+JanusGraph on Cassandra or RocksDB). Property updates are written
+sequentially to write-ahead logs and immutable memtables, providing
+high-write throughput for dynamic relationship updates.</li>
+</ul>
+<h3 id="local-edge-indexes-and-composite-adjacency-structures">Local
+Edge Indexes and Composite Adjacency Structures</h3>
+<p>To optimize traversals from a specific node without scanning a global
+index, graph databases employ localized indexing techniques:</p>
+<ul>
+<li><strong>Vertex-Centric Indexes (Edge-Centric Indexes):</strong> In
+graphs with "supernodes" (nodes with thousands or millions of
+connections), filtering edges attached to a single vertex becomes a
+performance issue. A vertex-centric index creates a local index per
+vertex, ordering its incident edges by label and specific property
+values (e.g., sorting a user's <code>FOLLOWS</code> edges by
+<code>created_at</code>). This enables <span
+class="math inline">\(O(\log k)\)</span> lookup times for filtering a
+node's edges, where <span class="math inline">\(k\)</span> is the degree
+of that specific node.</li>
+<li><strong>Compound Keys in Adjacency Lists:</strong> Some native
+engines sort the underlying relationship records on disk by combining
+the relationship type with critical edge properties. For example, an
+edge record may be physically sequenced by
+<code>[Source_ID, Edge_Type, Timestamp, Target_ID]</code>, turning
+property filtering into a continuous range read directly from
+storage.</li>
+</ul>
+<h3 id="inverted-and-full-text-indexes">Inverted and Full-Text
+Indexes</h3>
+<p>When edge attributes contain unstructured text or require complex
+multi-attribute querying, graph platforms frequently integrate dedicated
+search libraries (like Apache Lucene) or distributed search clusters
+(such as Elasticsearch or OpenSearch).</p>
+<ul>
+<li><strong>Inverted Index Mapping:</strong> The search engine builds an
+inverted index where tokens from string properties point to edge
+IDs.</li>
+<li><strong>Query Execution:</strong> The graph query planner delegates
+the text evaluation to the search engine, retrieves a candidate list of
+edge IDs, and hydrates the corresponding relationship objects in the
+graph execution pipeline to continue traversal.</li>
+</ul>
+<h3 id="storage-and-maintenance-overhead">Storage and Maintenance
+Overhead</h3>
+<p>Indexing edge properties involves trade-offs:</p>
+<ol type="1">
+<li><strong>Write Amplification:</strong> Updating an edge property
+requires updating the edge storage record and any associated global or
+vertex-centric index structures.</li>
+<li><strong>Memory Footprint:</strong> Because graphs often have an
+order of magnitude more edges than nodes, indexing edge properties
+demands significantly more memory and cache allocation than node-only
+indexing.</li>
+<li><strong>Traversal vs. Lookup Balance:</strong> Query planners must
+dynamically choose whether to traverse pointers and filter edge
+properties in memory (beneficial for low-degree nodes) or consult
+secondary edge indexes first (beneficial when the filter is highly
+selective across the entire graph).</li>
+</ol></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/indexing-edge-properties-in-graph-no-sql-databases';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

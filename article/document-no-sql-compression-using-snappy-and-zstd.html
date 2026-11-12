@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document NoSQL Compression Using Snappy and Zstd - nosql</title>
+    <meta name="description" content="Document NoSQL databases like MongoDB and Couchbase rely heavily on compression algorithms such as Snappy and Zstandard (Zstd) to minimize storage footprints and reduce disk I/O bottlenecks without crippling CPU throughput. This article explains the under">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/document-no-sql-compression-using-snappy-and-zstd">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Document NoSQL Compression Using Snappy and Zstd - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/document-no-sql-compression-using-snappy-and-zstd" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Document NoSQL databases like MongoDB and Couchbase rely heavily on compression algorithms such as Snappy and Zstandard (Zstd) to minimize storage footprints and reduce disk I/O bottlenecks without crippling CPU throughput. This article explains the under" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="document-nosql-compression-using-snappy-and-zstd">Document NoSQL
+Compression Using Snappy and Zstd</h1>
+<p>Document NoSQL databases like MongoDB and Couchbase rely heavily on
+compression algorithms such as Snappy and Zstandard (Zstd) to minimize
+storage footprints and reduce disk I/O bottlenecks without crippling CPU
+throughput. This article explains the underlying mechanics of how
+document payloads are serialized, grouped, and compressed, highlighting
+the technical differences between Snappy’s speed-oriented architecture
+and Zstd’s ratio-optimized entropy encoding.</p>
+<h3 id="the-ingestion-and-serialization-phase">The Ingestion and
+Serialization Phase</h3>
+<p>Before compression occurs, raw data formats like JSON are converted
+into structured binary representations (such as BSON, FlatBuffers, or
+custom internal binary layouts). Binary formats standardize data types,
+establish explicit byte lengths for fields, and eliminate redundant
+whitespace. This step creates a predictable byte stream, making it
+significantly easier for pattern-matching compression algorithms to
+identify repetitive data structures.</p>
+<h3 id="block-level-vs-document-level-compression">Block-Level vs.
+Document-Level Compression</h3>
+<p>While some systems allow individual document compression, modern
+storage engines (such as MongoDB's WiredTiger or RocksDB-backed NoSQL
+variants) typically perform compression at the block or page level,
+usually between 4 KB and 64 KB.</p>
+<p>Compressing isolated, small documents yields poor compression ratios
+because the sliding window lacks enough context to find recurring
+patterns. By packing multiple documents into a single page, the
+compression algorithm can exploit structural redundancies across
+different documents—such as identical field names, shared schema
+definitions, and recurring values.</p>
+<h3 id="snappy-optimized-for-pure-throughput">Snappy: Optimized for Pure
+Throughput</h3>
+<p>Snappy, developed by Google, prioritizes execution speed over
+achieving the highest compression ratio. It does not use entropy
+encoding (like Huffman coding), which requires computationally expensive
+bit-level operations.</p>
+<p>Instead, Snappy relies on a byte-oriented variant of the LZ77
+algorithm:</p>
+<ol type="1">
+<li><strong>Hash Table Lookup:</strong> As the byte stream is processed,
+Snappy maintains a small hash table of recent 4-byte sequences to
+identify repeated substrings within a sliding window.</li>
+<li><strong>Back-References:</strong> When a duplicate sequence is
+found, it is replaced with an offset and length pointer (an "element
+match"). Unmatched sequences are emitted as raw "literals."</li>
+<li><strong>Byte Alignment:</strong> All emitted tokens are
+byte-aligned. This allows modern CPUs to read and write without shifting
+bits, delivering multi-hundred megabyte-per-second compression and
+gigabyte-per-second decompression speeds per core.</li>
+</ol>
+<p>In document stores, Snappy is the default choice for write-heavy,
+latency-sensitive workloads where CPU cycles are at a premium and disk
+I/O is fast (e.g., NVMe storage).</p>
+<h3 id="zstandard-zstd-high-ratios-with-adaptive-speed">Zstandard
+(Zstd): High Ratios with Adaptive Speed</h3>
+<p>Zstd, developed by Meta, provides compression ratios approaching gzip
+with decompression speeds comparable to Snappy. It achieves this balance
+through a multi-stage pipeline:</p>
+<ol type="1">
+<li><strong>FSE (Finite State Entropy):</strong> Zstd uses Asymmetric
+Numeral Systems (tANS) alongside Huffman coding for its entropy stage.
+FSE allows precise state transitions that encode symbols with fractional
+bits, providing superior compression density without the heavy
+computational overhead of traditional arithmetic coding.</li>
+<li><strong>Tunable Levels:</strong> Zstd offers levels ranging from 1
+to 22. Most database engines use levels 1 through 3 for real-time
+operations, maintaining rapid throughput while beating Snappy’s
+compression ratio by 10% to 30%.</li>
+<li><strong>Dictionary Training:</strong> A key advantage of Zstd in
+document stores is its native dictionary support. Databases can
+pre-train a static dictionary on the document schema (field names,
+standard metadata keys). The engine then references this shared
+dictionary during block compression, allowing even tiny, isolated
+documents to be compressed efficiently without storing key names
+redundantly inside every block.</li>
+</ol>
+<h3 id="runtime-memory-and-io-mechanics">Runtime Memory and I/O
+Mechanics</h3>
+<p>During read and write operations, the database engine maintains an
+in-memory page cache alongside the operating system buffer cache.</p>
+<ul>
+<li><strong>Writes:</strong> Documents accumulate in an uncompressed
+memory buffer. Once the buffer reaches the block threshold, the storage
+engine invokes Snappy or Zstd to compress the entire block, adds an
+integrity checksum (e.g., CRC32), and writes the compressed block
+sequentially to disk.</li>
+<li><strong>Reads:</strong> When a document is requested, the engine
+reads the compressed block from disk into memory, decompresses the
+entire block into the internal cache, and serves the targeted document.
+Decompression speeds are critical here; if decompression is too slow,
+read latency spikes regardless of disk speed.</li>
+</ul>
+<p>By matching workload requirements to the algorithm—Snappy for
+low-CPU, high-concurrency ingestion, and Zstd for balanced performance
+and reduced storage costs—NoSQL engines maintain sub-millisecond
+document retrieval across massive data volumes.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/document-no-sql-compression-using-snappy-and-zstd';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

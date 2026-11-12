@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How NoSQL Engines Implement LRU and LFU Eviction - nosql</title>
+    <meta name="description" content="NoSQL key-value engines rely on eviction policies to maintain high throughput and low latency when dataset sizes exceed available RAM. This article explores how modern key-value stores move beyond textbook data structures to implement Least Recently Used">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/how-no-sql-engines-implement-lru-and-lfu-eviction">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How NoSQL Engines Implement LRU and LFU Eviction - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/how-no-sql-engines-implement-lru-and-lfu-eviction" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="NoSQL key-value engines rely on eviction policies to maintain high throughput and low latency when dataset sizes exceed available RAM. This article explores how modern key-value stores move beyond textbook data structures to implement Least Recently Used" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-nosql-engines-implement-lru-and-lfu-eviction">How NoSQL
+Engines Implement LRU and LFU Eviction</h1>
+<p>NoSQL key-value engines rely on eviction policies to maintain high
+throughput and low latency when dataset sizes exceed available RAM. This
+article explores how modern key-value stores move beyond textbook data
+structures to implement Least Recently Used (LRU) and Least Frequently
+Used (LFU) algorithms, detailing exact vs. approximated implementations,
+memory reduction techniques, and concurrency optimizations.</p>
+<hr />
+<h3 id="the-challenge-of-native-implementations">The Challenge of Native
+Implementations</h3>
+<p>In traditional computer science theory, an LRU cache is implemented
+using a hash map paired with a doubly linked list. Every read or write
+operation moves the accessed node to the head of the list, and evictions
+simply remove the node at the tail. Both operations run in <span
+class="math inline">\(O(1)\)</span> time complexity.</p>
+<p>However, high-throughput NoSQL engines (such as Redis, Memcached, and
+Aerospike) rarely use exact linked-list implementations for two main
+reasons:</p>
+<ol type="1">
+<li><strong>Memory Overhead:</strong> A doubly linked list requires two
+64-bit pointers (prev and next) per entry, consuming an additional 16
+bytes of memory per key. In systems storing hundreds of millions of
+small values, this overhead represents a massive percentage of total
+RAM.</li>
+<li><strong>Lock Contention:</strong> In a multi-threaded or concurrent
+pipeline, moving an element to the head on every read requires modifying
+pointers. This converts concurrent read operations into mutating
+operations that necessitate exclusive locks, severely degrading read
+throughput.</li>
+</ol>
+<hr />
+<h3 id="approximated-lru-in-production">Approximated LRU in
+Production</h3>
+<p>To eliminate memory and concurrency bottlenecks, production key-value
+stores use approximated (sampled) algorithms.</p>
+<h4 id="sampled-lru-architecture">Sampled LRU Architecture</h4>
+<p>Instead of tracking absolute order via pointers, engines store a
+timestamp or an idle-time clock directly inside the key's metadata
+header.</p>
+<ul>
+<li><strong>Redis:</strong> Redis allocates 24 bits in the
+<code>robj</code> structure for an LRU clock. A global server clock
+updates periodically. When a key is accessed, its internal clock is
+updated to match the global clock.</li>
+<li><strong>The Eviction Cycle:</strong> When memory exceeds
+<code>maxmemory</code>:
+<ol type="1">
+<li>The engine selects a configurable random sample of keys (typically 5
+to 10).</li>
+<li>It calculates the idle time for each sampled key by subtracting the
+key's LRU timestamp from the current global clock.</li>
+<li>The key with the highest idle time is evicted.</li>
+</ol></li>
+</ul>
+<h4 id="eviction-pools">Eviction Pools</h4>
+<p>Modern versions of Redis improve this approximation using an
+<em>eviction pool</em>. The eviction pool is an array of candidate keys
+sorted by idle time. When a sample of keys is evaluated, qualifying keys
+are inserted into the pool. The engine consistently evicts the best
+candidate from the pool rather than purely from the instant sample,
+achieving behavior virtually indistinguishable from true LRU without the
+pointer overhead.</p>
+<hr />
+<h3 id="implementing-lfu-handling-frequency-and-decay">Implementing LFU:
+Handling Frequency and Decay</h3>
+<p>LFU evicts items with the lowest access count. A naive LFU
+implementation that merely increments an integer counter suffers from
+two primary issues: counter saturation (integers running out of bits)
+and "cache pollution" (historical popularity preventing newly popular
+items from remaining cached).</p>
+<h4 id="probabilistic-counting-morris-counters">Probabilistic Counting
+(Morris Counters)</h4>
+<p>NoSQL engines solve the bit-overhead problem using logarithmic or
+probabilistic counters. Redis, for example, compresses LFU tracking into
+the exact same 24 bits used for LRU:</p>
+<ul>
+<li><strong>16 bits:</strong> Last decay time (timestamp).</li>
+<li><strong>8 bits:</strong> Logarithmic access counter (Logistic
+Counter).</li>
+</ul>
+<p>An 8-bit counter can only count up to 255 if incremented linearly.
+With probabilistic counting, the counter increments based on a
+probability inversely proportional to the current counter value:</p>
+<p><span class="math display">\[\Delta = \frac{1}{\text{counter} \times
+\text{lfu\_log\_factor} + 1}\]</span></p>
+<p>As the counter increases, the probability of it incrementing
+decreases, allowing an 8-bit field to represent millions of
+accesses.</p>
+<h4 id="counter-decay">Counter Decay</h4>
+<p>To solve cache pollution, the access count must decay over time:</p>
+<ol type="1">
+<li>When a key is accessed, the engine reads the 16-bit decay time.</li>
+<li>It calculates how many time intervals (e.g., minutes) have passed
+since the last access.</li>
+<li>The counter is decremented proportional to the elapsed time before
+the access logic is processed.</li>
+</ol>
+<p>During an eviction pass, the engine samples keys just as it does in
+approximated LRU, but selects the key with the lowest decayed counter
+for removal.</p>
+<hr />
+<h3 id="concurrency-and-threading-optimizations">Concurrency and
+Threading Optimizations</h3>
+<p>Handling eviction in multi-core architectures requires decoupling
+cache tracking from execution paths:</p>
+<ul>
+<li><strong>Batched Buffer Updates:</strong> High-performance engines
+like Caffeine and modern distributed caches avoid locking on reads by
+writing access events to a lock-free, bounded ring buffer. Background
+eviction threads read these ring buffers in batches to update LRU/LFU
+lists asynchronously.</li>
+<li><strong>Partitioned LRU:</strong> Memcached partitions memory into
+"Slab Classes" based on item size. Eviction operates independently
+within individual slab classes, preventing small keys from contending
+for eviction with large values.</li>
+<li><strong>Clock (Second Chance) Algorithm:</strong> Other engines
+implement variations of the Clock algorithm, treating memory pages or
+keys as a circular buffer. A single "used" bit is evaluated: if the bit
+is 1, it is set to 0 and skipped; if the bit is 0, the item is selected
+for eviction. This avoids global locking and list reordering
+altogether.</li>
+</ul></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/how-no-sql-engines-implement-lru-and-lfu-eviction';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

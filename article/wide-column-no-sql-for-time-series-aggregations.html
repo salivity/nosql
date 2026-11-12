@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wide-Column NoSQL for Time-Series Aggregations - nosql</title>
+    <meta name="description" content="Real-time analytics systems rely heavily on wide-column NoSQL databases—such as Apache Cassandra, ScyllaDB, and Apache HBase—to process and aggregate high-velocity time-series data. This article explores how wide-column architectures meet the demanding co">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/wide-column-no-sql-for-time-series-aggregations">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Wide-Column NoSQL for Time-Series Aggregations - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/wide-column-no-sql-for-time-series-aggregations" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Real-time analytics systems rely heavily on wide-column NoSQL databases—such as Apache Cassandra, ScyllaDB, and Apache HBase—to process and aggregate high-velocity time-series data. This article explores how wide-column architectures meet the demanding co" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="wide-column-nosql-for-time-series-aggregations">Wide-Column
+NoSQL for Time-Series Aggregations</h1>
+<p>Real-time analytics systems rely heavily on wide-column NoSQL
+databases—such as Apache Cassandra, ScyllaDB, and Apache HBase—to
+process and aggregate high-velocity time-series data. This article
+explores how wide-column architectures meet the demanding constraints of
+time-series workloads, examining their write-optimized storage engines,
+natural sorting capabilities, sparse schema flexibility, and linear
+horizontal scalability.</p>
+<h3 id="append-heavy-write-optimization">Append-Heavy Write
+Optimization</h3>
+<p>Time-series workloads are overwhelmingly write-heavy, characterized
+by millions of events, metrics, and logs streaming into the system every
+second. Traditional relational databases struggle under this continuous
+load because updating B-Tree indexes causes random disk I/O and locking
+overhead.</p>
+<p>Wide-column databases address this by using Log-Structured Merge-tree
+(LSM-tree) storage engines. Writes are sequentially appended to an
+in-memory buffer (MemTable) and a sequential commit log. Once the buffer
+fills, it flushes sequentially to immutable disk files (SSTables). This
+eliminates random writes, providing high and predictable write
+throughput capable of absorbing real-time telemetry from thousands of
+concurrent sources without latency spikes.</p>
+<h3 id="clustered-data-layout-for-fast-range-queries">Clustered Data
+Layout for Fast Range Queries</h3>
+<p>Time-series aggregation requires querying consecutive timestamps for
+a specific entity (such as a device, user, or server) over a specific
+time window. Wide-column databases structure data using a combination of
+partition keys and clustering keys:</p>
+<ul>
+<li><strong>Partition Key:</strong> Determines which physical node in
+the cluster holds the data (e.g., <code>device_id</code> or
+<code>device_id + date</code>).</li>
+<li><strong>Clustering Key:</strong> Controls the physical on-disk sort
+order of columns within that partition (typically the
+<code>timestamp</code>).</li>
+</ul>
+<p>Because data inside each partition is stored sequentially in
+chronological order, retrieving an hour or a day of metrics does not
+require scanning an entire table. The database performs a single seek to
+the starting timestamp and reads contiguous blocks of data, minimizing
+disk head movement and maximizing cache efficiency for downstream
+aggregations.</p>
+<h3 id="sparse-schema-support-and-dynamic-metrics">Sparse Schema Support
+and Dynamic Metrics</h3>
+<p>Telemetry and IoT data formats evolve constantly, with different
+devices or applications emitting different sets of metrics. A relational
+database requires a defined column for every possible metric or relies
+on unstructured JSON blobs that are costly to index and parse during
+aggregations.</p>
+<p>Wide-column databases treat rows as multi-dimensional key-value maps
+where each row can contain completely different columns without
+incurring storage penalties for null values. New metrics can be added
+dynamically at ingestion time, allowing analytics engines to aggregate
+disparate data points across varied data schemas directly within the
+core storage layer.</p>
+<h3 id="linear-horizontal-scaling-and-data-locality">Linear Horizontal
+Scaling and Data Locality</h3>
+<p>As data volumes grow, analytics engines must scale capacity without
+downtime. Wide-column stores use consistent hashing to partition data
+across a distributed cluster of commodity servers:</p>
+<ol type="1">
+<li><strong>Even Workload Distribution:</strong> By carefully designing
+composite partition keys (e.g., bucketing by time windows such as
+<code>sensor_id:YYYY-MM-DD</code>), the cluster distributes write
+traffic across all nodes, preventing hot spots on current
+timestamps.</li>
+<li><strong>Predictable Query Latency:</strong> Analytics engines like
+Apache Spark or Presto/Trino can push down aggregations to individual
+storage nodes, parallelizing the aggregation phase across the cluster
+where the data natively resides.</li>
+</ol>
+<h3 id="automated-lifecycle-management-and-ttls">Automated Lifecycle
+Management and TTLs</h3>
+<p>Time-series systems require fast aggregation on recent high-fidelity
+data, while older data is either downsampled or discarded. Wide-column
+databases natively support Time-To-Live (TTL) attributes at the cell or
+row level. Expired raw metrics are automatically marked for deletion and
+reclaimed during background compaction processes, freeing storage
+capacity without requiring expensive, locking <code>DELETE</code>
+queries that disrupt real-time aggregation workloads.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/wide-column-no-sql-for-time-series-aggregations';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

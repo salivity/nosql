@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How NoSQL Stores Optimize Memory with Ziplists - nosql</title>
+    <meta name="description" content="In-memory key-value NoSQL stores, such as Redis, face substantial memory overhead when using standard pointer-based data structures to manage small collections. To solve this, databases employ compact, sequential byte arrays known as ziplists (and their m">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/how-no-sql-stores-optimize-memory-with-ziplists">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How NoSQL Stores Optimize Memory with Ziplists - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/how-no-sql-stores-optimize-memory-with-ziplists" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In-memory key-value NoSQL stores, such as Redis, face substantial memory overhead when using standard pointer-based data structures to manage small collections. To solve this, databases employ compact, sequential byte arrays known as ziplists (and their m" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-nosql-stores-optimize-memory-with-ziplists">How NoSQL Stores
+Optimize Memory with Ziplists</h1>
+<p>In-memory key-value NoSQL stores, such as Redis, face substantial
+memory overhead when using standard pointer-based data structures to
+manage small collections. To solve this, databases employ compact,
+sequential byte arrays known as ziplists (and their modern derivatives,
+listpacks) that encode multiple elements into a single contiguous block
+of memory. This article explains how ziplists eliminate pointer overhead
+and memory fragmentation, details their internal architecture, and
+outlines the performance trade-offs databases manage when balancing low
+memory usage against CPU consumption.</p>
+<h3 id="the-problem-with-traditional-data-structures">The Problem with
+Traditional Data Structures</h3>
+<p>Standard implementations of data structures—such as doubly linked
+lists, hash tables, and skiplists—rely heavily on pointers. In a 64-bit
+architecture:</p>
+<ul>
+<li>Every memory pointer consumes 8 bytes.</li>
+<li>A standard doubly linked list node requires two pointers (16 bytes)
+plus memory allocator overhead (typically 8 to 16 bytes per allocation
+via <code>malloc</code>).</li>
+<li>Storing a 2-byte integer inside a standard linked-list node can
+easily consume 32 to 48 bytes of actual RAM.</li>
+</ul>
+<p>In addition to pure byte overhead, allocating thousands of tiny,
+disjoint nodes across the heap causes severe memory fragmentation and
+poor CPU cache locality, degrading system performance.</p>
+<h3 id="how-a-ziplist-works">How a Ziplist Works</h3>
+<p>A ziplist replaces individual pointer-linked nodes with a single
+contiguous block of allocated memory. Instead of storing references to
+the locations of adjacent elements, the ziplist serializes items
+end-to-end using variable-length prefixes.</p>
+<p>A complete ziplist structure typically consists of:</p>
+<ul>
+<li><strong>zlbytes (32 bits):</strong> An unsigned integer holding the
+total number of bytes consumed by the ziplist, allowing for fast
+resizing and bounds checking.</li>
+<li><strong>zltail (32 bits):</strong> The byte offset to the last
+entry, allowing <span class="math inline">\(O(1)\)</span> access to the
+tail without traversing the entire list.</li>
+<li><strong>zllen (16 bits):</strong> The total number of entries
+stored.</li>
+<li><strong>entries:</strong> The variable-length payload elements.</li>
+<li><strong>zlend (8 bits):</strong> A dedicated byte (usually
+<code>0xFF</code>) marking the end of the data structure.</li>
+</ul>
+<h3 id="anatomy-of-an-individual-entry">Anatomy of an Individual
+Entry</h3>
+<p>Each entry inside a ziplist does not contain memory addresses.
+Instead, it contains three tightly packed fields:</p>
+<ol type="1">
+<li><strong>Previous Entry Length (<code>prevlen</code>):</strong>
+Encodes the size of the preceding element using either 1 byte (for
+lengths under 254 bytes) or 5 bytes (for larger lengths). This allows
+the database to traverse the list backward from tail to head without
+backward pointers.</li>
+<li><strong>Encoding:</strong> A variable-length field indicating the
+data type (string or integer) and the length of the current payload.
+Small integers are frequently inlined directly into the encoding bits to
+save additional space.</li>
+<li><strong>Data:</strong> The raw bytes of the string or binary
+representation of the integer.</li>
+</ol>
+<p>By dynamically sizing metadata bytes based on the actual payload
+length, the structure virtually eliminates unused space.</p>
+<h3 id="memory-optimization-benefits">Memory Optimization Benefits</h3>
+<ul>
+<li><strong>Zero Pointer Overhead:</strong> Removing memory addresses
+saves 16 bytes per element compared to traditional bidirectional
+nodes.</li>
+<li><strong>Single Allocation:</strong> The entire list is stored in a
+single buffer. This removes the per-allocation metadata overhead
+enforced by memory allocators like <code>jemalloc</code> or
+<code>glibc</code>.</li>
+<li><strong>CPU Cache Efficiency:</strong> Because data is contiguous in
+memory, sequential iterations load whole chunks of elements into the CPU
+L1/L2 cache lines simultaneously, minimizing cache misses.</li>
+</ul>
+<h3 id="the-cpu-vs-memory-trade-off">The CPU vs. Memory Trade-Off</h3>
+<p>While ziplists achieve remarkable compression, they are not suited
+for all workloads due to computational overhead:</p>
+<ul>
+<li><strong>Copy and Resize Costs:</strong> Every insertion or deletion
+requires a memory reallocation (<code>realloc</code>) and shifts
+existing bytes, turning operations that are <span
+class="math inline">\(O(1)\)</span> in linked lists into <span
+class="math inline">\(O(N)\)</span> operations.</li>
+<li><strong>Cascading Updates:</strong> In rare cases, changing the size
+of an element can cause the next element's <code>prevlen</code> field to
+expand from 1 byte to 5 bytes, potentially triggering a chain reaction
+of reallocations down the array.</li>
+</ul>
+<h3 id="threshold-based-conversion">Threshold-Based Conversion</h3>
+<p>To balance memory savings and computational latency, NoSQL engines
+apply ziplists conditionally. A key-value store monitors both the number
+of elements and the size of individual values (e.g., maximum 512 entries
+and 64 bytes per entry). While within these thresholds, the key uses the
+compact ziplist representation. Once a limit is breached, the engine
+transparently converts the compact structure into a traditional hash
+table, skiplist, or a hybrid structure (such as a quicklist, which links
+multiple small ziplists together).</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/how-no-sql-stores-optimize-memory-with-ziplists';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

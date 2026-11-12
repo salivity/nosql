@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Automated Downsampling in Time-Series NoSQL Engines - nosql</title>
+    <meta name="description" content="Time-series databases and NoSQL engines ingest vast volumes of high-frequency telemetry, making long-term storage of raw data cost-prohibitive and computationally inefficient. To solve this, modern engines rely on automated downsampling architectures that">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/automated-downsampling-in-time-series-no-sql-engines">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Automated Downsampling in Time-Series NoSQL Engines - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/automated-downsampling-in-time-series-no-sql-engines" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Time-series databases and NoSQL engines ingest vast volumes of high-frequency telemetry, making long-term storage of raw data cost-prohibitive and computationally inefficient. To solve this, modern engines rely on automated downsampling architectures that" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="automated-downsampling-in-time-series-nosql-engines">Automated
+Downsampling in Time-Series NoSQL Engines</h1>
+<p>Time-series databases and NoSQL engines ingest vast volumes of
+high-frequency telemetry, making long-term storage of raw data
+cost-prohibitive and computationally inefficient. To solve this, modern
+engines rely on automated downsampling architectures that aggregate
+older metrics into lower-resolution intervals over time. This article
+explores the core structural designs that make this automation possible,
+specifically focusing on time-windowed partitioning, LSM-tree compaction
+hooks, background rollup pipelines, and tiered retention lifecycles.</p>
+<h3 id="time-windowed-partitioning-and-chunking">Time-Windowed
+Partitioning and Chunking</h3>
+<p>The primary structural foundation for handling time-series data at
+scale is partitioning by discrete time intervals (e.g., hourly, daily,
+or weekly blocks). Instead of managing a single monolithic index, the
+storage layer splits data into immutable time-based chunks.</p>
+<p>Because older chunks naturally age out of active write operations,
+they transition into read-only states. This immutability allows the
+engine to lock historical time blocks and safely run transformation
+tasks without acquiring heavy locks or contending with incoming write
+streams. When an entire time block reaches a predetermined age boundary,
+the system can mark it as a candidate for batch reduction rather than
+tracking individual data points.</p>
+<h3 id="custom-compaction-hooks-in-lsm-trees">Custom Compaction Hooks in
+LSM-Trees</h3>
+<p>Many NoSQL time-series platforms utilize Log-Structured Merge-tree
+(LSM-tree) architectures, such as Time-Structured Merge (TSM) trees or
+modified RocksDB storage layers. In standard LSM-trees, data is written
+sequentially to memory buffers (MemTables) and flushed to disk as
+immutable sorted string tables (SSTables). Background tasks continuously
+merge smaller SSTables into larger ones to reclaim space and prune
+deleted records.</p>
+<p>Time-series engines hook into this native merge cycle by implementing
+custom compaction filters:</p>
+<ul>
+<li><strong>In-Flight Aggregation:</strong> As the compaction process
+reads raw data points from adjacent files, it evaluates their timestamps
+and resolution policies.</li>
+<li><strong>Lossy Merging:</strong> If the data points belong to an
+older time window, the filter replaces high-density samples (e.g.,
+per-second measurements) with statistical summaries (min, max, mean,
+count) over broader buckets (e.g., five-minute intervals).</li>
+<li><strong>Zero-Write Overhead:</strong> Because compaction is already
+reading and rewriting files to optimize the storage layout, downsampling
+incurs virtually zero additional I/O overhead compared to typical
+database maintenance.</li>
+</ul>
+<h3 id="stream-based-background-rollup-engines">Stream-Based Background
+Rollup Engines</h3>
+<p>Rather than modifying historical files in place, several engines
+implement asynchronous streaming daemons or continuous query managers.
+These components run scheduled background sweeps over freshly sealed
+partitions.</p>
+<ol type="1">
+<li><strong>Aggregation Pipeline:</strong> The engine defines fixed
+target granularities (e.g., raw <span
+class="math inline">\(\rightarrow\)</span> 1-minute <span
+class="math inline">\(\rightarrow\)</span> 1-hour).</li>
+<li><strong>Materialized Rollup Tables:</strong> The background engine
+scans newly closed raw partitions, computes downsampled buckets, and
+inserts the aggregated records into secondary, low-resolution storage
+tables or column families.</li>
+<li><strong>Deterministic Cursor Tracking:</strong> The system maintains
+progress cursors to track which time spans have already been rolled up,
+ensuring data consistency even if the database is restarted
+mid-aggregation.</li>
+</ol>
+<h3 id="time-to-live-ttl-and-tiered-storage-decoupling">Time-to-Live
+(TTL) and Tiered Storage Decoupling</h3>
+<p>Automated downsampling requires a clean mechanism to discard obsolete
+raw records once the aggregated metrics are generated. NoSQL
+architectures achieve this by applying independent Time-to-Live (TTL)
+configurations to each data resolution tier.</p>
+<p>Raw tables are assigned aggressive TTLs (such as 7 to 30 days), while
+aggregated tables are configured with multi-year or infinite retention.
+Because partitions correspond to deterministic time ranges, the storage
+engine can delete an expired raw partition via a fast file-system
+unlinking operation, avoiding the performance degradation associated
+with scanning and deleting individual rows. By pairing time-based
+partitioning with decoupled retention layers, the engine guarantees that
+old metrics are downsampled and purged completely automatically.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/automated-downsampling-in-time-series-no-sql-engines';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

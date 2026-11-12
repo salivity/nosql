@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minimizing Lock Contention in Key-Value NoSQL Writes - nosql</title>
+    <meta name="description" content="Key-value NoSQL platforms sustain high-frequency write workloads by replacing traditional, heavyweight relational locking models with non-blocking, append-heavy, and partitioned architectures. By employing Log-Structured Merge-trees (LSM-trees), shared-no">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/minimizing-lock-contention-in-key-value-no-sql-writes">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Minimizing Lock Contention in Key-Value NoSQL Writes - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/minimizing-lock-contention-in-key-value-no-sql-writes" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Key-value NoSQL platforms sustain high-frequency write workloads by replacing traditional, heavyweight relational locking models with non-blocking, append-heavy, and partitioned architectures. By employing Log-Structured Merge-trees (LSM-trees), shared-no" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="minimizing-lock-contention-in-key-value-nosql-writes">Minimizing
+Lock Contention in Key-Value NoSQL Writes</h1>
+<p>Key-value NoSQL platforms sustain high-frequency write workloads by
+replacing traditional, heavyweight relational locking models with
+non-blocking, append-heavy, and partitioned architectures. By employing
+Log-Structured Merge-trees (LSM-trees), shared-nothing threading,
+lock-free memory primitives, and asynchronous reconciliation, these
+systems decouple write execution from the need to acquire exclusive,
+multi-layered locks. The following architectural strategies detail how
+key-value databases eliminate bottlenecks and maintain low latency
+during intense write traffic.</p>
+<h2 id="append-only-storage-and-lsm-trees">Append-Only Storage and
+LSM-Trees</h2>
+<p>Instead of modifying records in place—which requires exclusive write
+locks on specific data pages—many key-value stores (such as RocksDB and
+Cassandra) use Log-Structured Merge-trees (LSM-trees). In an LSM-tree
+architecture, every write operation is sequentially appended to an
+in-memory buffer (the MemTable) and a sequential Write-Ahead Log (WAL)
+on disk.</p>
+<p>Because writes only append rather than mutate existing structures on
+disk:</p>
+<ul>
+<li>Disk I/O remains sequential, eliminating random seek overhead.</li>
+<li>There are no page-level locks.</li>
+<li>The in-memory MemTable can often be updated using concurrent,
+lock-free skip lists, allowing multiple threads to write simultaneously
+with minimal CPU cache contention.</li>
+</ul>
+<p>Once the MemTable reaches capacity, it becomes immutable and is
+flushed to disk in the background as an SSTable (Sorted String Table),
+completely isolating background maintenance from incoming real-time
+write streams.</p>
+<h2 id="memory-partitioning-and-thread-per-core-design">Memory
+Partitioning and Thread-per-Core Design</h2>
+<p>A primary cause of lock contention is multiple CPU threads fighting
+for access to shared data structures. Modern key-value stores, such as
+Redis or ScyllaDB, minimize or completely eliminate this contention by
+partitioning data across CPU cores in a "shared-nothing"
+architecture.</p>
+<ul>
+<li><strong>Hash-Based Sharding:</strong> Keys are hashed into distinct
+partitions (or shards).</li>
+<li><strong>Dedicated Execution Threads:</strong> Each shard is pinned
+to a specific CPU core and managed by an independent event loop.</li>
+<li><strong>Lock-Free Processing:</strong> Because only one thread ever
+reads or writes to a given partition, the system requires no mutexes or
+semaphores for state mutations within that shard. The database runs at
+the speed of the CPU cache without inter-core synchronization
+overhead.</li>
+</ul>
+<h2 id="atomic-primitives-and-lock-free-data-structures">Atomic
+Primitives and Lock-Free Data Structures</h2>
+<p>When platforms do use multi-threaded access to shared memory, they
+avoid operating-system-level mutexes in favor of atomic CPU
+instructions, such as Compare-And-Swap (CAS).</p>
+<p>Using lock-free and wait-free algorithms, systems update pointers and
+reference counters without forcing threads into a sleep-and-wake cycle
+governed by the OS scheduler. If two writes conflict at the exact same
+microsecond, the losing thread simply retries the atomic operation
+immediately in user space. This eliminates the massive latency spikes
+associated with context switching during peak write loads.</p>
+<h2 id="optimistic-concurrency-control-occ">Optimistic Concurrency
+Control (OCC)</h2>
+<p>Relational databases typically employ pessimistic locking, placing
+locks on records before modifying them to ensure serializability.
+Key-value systems, by contrast, frequently rely on Optimistic
+Concurrency Control.</p>
+<p>Under OCC, writes proceed under the assumption that conflicts are
+rare:</p>
+<ol type="1">
+<li>The client reads the current version identifier (or timestamp) of a
+key.</li>
+<li>The client prepares the mutation locally.</li>
+<li>The mutation is committed only if the version identifier has not
+changed.</li>
+</ol>
+<p>If a conflict occurs, the transaction aborts and retries. This
+removes lock overhead entirely from non-conflicting writes and shifts
+the cost of conflict resolution strictly to contentious keys.</p>
+<h2 id="granular-lock-striping">Granular Lock Striping</h2>
+<p>In scenarios where mutual exclusion is mandatory (such as maintaining
+cache metadata or localized hash tables), key-value platforms use lock
+striping instead of global or coarse-grained locks.</p>
+<p>Rather than locking an entire hash table or partition, the platform
+maintains an array of smaller locks. A key is hashed to determine which
+specific lock in the stripe protects it. For example, an array of 1,024
+striped locks can protect millions of keys, reducing the mathematical
+probability of two random writes contending for the exact same lock to a
+fraction of a percent.</p>
+<h2 id="asynchronous-replication-and-conflict-resolution">Asynchronous
+Replication and Conflict Resolution</h2>
+<p>Distributed key-value stores push lock avoidance to the network layer
+by using eventual consistency models. Instead of running synchronous,
+distributed two-phase commit (2PC) protocols—which lock records across
+multiple network nodes until all nodes acknowledge—writes are accepted
+locally by a quorum or even a single coordinator node.</p>
+<p>Discrepancies caused by concurrent writes across distributed replicas
+are settled asynchronously using techniques such as:</p>
+<ul>
+<li><strong>Last-Write-Wins (LWW):</strong> Using synchronized physical
+or hybrid-logical timestamps to overwrite older data.</li>
+<li><strong>Conflict-Free Replicated Data Types (CRDTs):</strong>
+Mathematically structured data types that converge deterministically
+without coordinating locks between replicas.</li>
+</ul>
+<p>By removing synchronous cross-node locking, distributed key-value
+platforms ensure that write throughput scales linearly with the addition
+of hardware.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/minimizing-lock-contention-in-key-value-no-sql-writes';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

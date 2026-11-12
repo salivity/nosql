@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Partial Document Updates in NoSQL Databases - nosql</title>
+    <meta name="description" content="Document-oriented NoSQL databases optimize partial document updates across the network by transmitting compact modification instructions rather than full payloads. Instead of forcing clients to download, alter, and resend entire multi-kilobyte or multi-me">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/partial-document-updates-in-no-sql-databases">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Partial Document Updates in NoSQL Databases - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/partial-document-updates-in-no-sql-databases" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Document-oriented NoSQL databases optimize partial document updates across the network by transmitting compact modification instructions rather than full payloads. Instead of forcing clients to download, alter, and resend entire multi-kilobyte or multi-me" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="partial-document-updates-in-nosql-databases">Partial Document
+Updates in NoSQL Databases</h1>
+<p>Document-oriented NoSQL databases optimize partial document updates
+across the network by transmitting compact modification instructions
+rather than full payloads. Instead of forcing clients to download,
+alter, and resend entire multi-kilobyte or multi-megabyte documents,
+these systems leverage specialized wire protocols, atomic operator
+semantics, and standard patching formats to execute localized field
+modifications directly on the server. This overview examines the
+mechanisms behind these updates, focusing on network protocol payloads,
+client-server interaction patterns, and server-side execution.</p>
+<h3 id="wire-protocols-and-command-serialization">Wire Protocols and
+Command Serialization</h3>
+<p>To perform a partial update, the client driver serializes an update
+command into the database's native wire protocol. The payload sent over
+TCP/IP consists of three primary components: a query selector
+identifying the target document, an update expression specifying the
+exact modifications, and operation flags (such as options for upserts or
+write concerns).</p>
+<p>In binary-protocol databases like MongoDB, the client constructs an
+<code>OP_MSG</code> frame carrying BSON-encoded commands. For an update,
+the payload contains field-level operators (such as <code>$set</code>,
+<code>$inc</code>, or <code>$unset</code>) paired with specific
+key-value targets. Because the client only serializes the operator and
+the delta value, network bandwidth consumption is decoupled from the
+overall size of the target document.</p>
+<p>In REST- or HTTP-based systems like Elasticsearch or Couchbase's
+management APIs, partial updates typically travel over HTTP
+<code>POST</code> or <code>PATCH</code> requests. These systems utilize
+one of two standardized payload structures:</p>
+<ol type="1">
+<li><strong>JSON Merge Patch (RFC 7396):</strong> The client sends a
+partial JSON document representing only the fields to be changed, added,
+or explicitly set to <code>null</code> for deletion.</li>
+<li><strong>JSON Patch (RFC 6902):</strong> The client sends an array of
+explicit operations (e.g., <code>add</code>, <code>remove</code>,
+<code>replace</code>) containing target JSON Pointer paths and
+values.</li>
+</ol>
+<h3
+id="transport-level-processing-and-concurrency-control">Transport-Level
+Processing and Concurrency Control</h3>
+<p>When the database engine receives the network packet, the transport
+layer deserializes the instruction set without retrieving the underlying
+document from storage. To apply the change safely without causing race
+conditions or lost updates, the system coordinates concurrency using one
+of two primary strategies over the protocol:</p>
+<ul>
+<li><strong>Optimistic Concurrency Control (OCC):</strong> HTTP-based
+APIs frequently use <code>ETag</code> headers or internal
+<code>_version</code> / <code>_seq_no</code> fields. The client submits
+the expected version alongside the update payload. If another client has
+updated the document concurrently, the network call fails immediately
+with a conflict status (such as HTTP <code>409 Conflict</code>),
+prompting the client to re-fetch and retry.</li>
+<li><strong>Atomic Server-Side Execution:</strong> In native binary
+protocols, the server typically handles atomic updates internally. The
+server acquires an exclusive lock on the document or memory page, reads
+the current state from cache or disk, applies the operator delta
+directly in memory, and writes the modification to the Write-Ahead Log
+(WAL) or transaction log.</li>
+</ul>
+<h3 id="storage-engine-application-and-replication">Storage Engine
+Application and Replication</h3>
+<p>Once the partial update payload is processed over the wire, the
+database decides how to apply the delta internally. Even though the
+network transmission contains only the delta, modern storage engines
+(such as WiredTiger or RocksDB-based engines) may handle the update
+differently based on data layout:</p>
+<ul>
+<li><strong>In-Place Updates:</strong> If the modified field does not
+expand the physical footprint of the record (for example, incrementing
+an integer counter), the engine alters the data directly in the memory
+buffer and marks the page as dirty.</li>
+<li><strong>Out-of-Place / Append-Only Updates:</strong> In
+Log-Structured Merge (LSM) trees or copy-on-write engines, the database
+writes a new version of the entire document or appends the delta entry
+to an active log segment, resolving full document reconstruction lazily
+during compaction or reads.</li>
+</ul>
+<p>For replica synchronization, distributed document databases must
+propagate the change across cluster nodes. Over the replication
+protocol, nodes typically broadcast the serialized delta or an
+idempotent representation of the update to secondary nodes, ensuring
+intra-cluster network efficiency matches the client-to-server
+connection.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/partial-document-updates-in-no-sql-databases';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

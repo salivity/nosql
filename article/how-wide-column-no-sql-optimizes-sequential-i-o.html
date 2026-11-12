@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Wide-Column NoSQL Optimizes Sequential I/O - nosql</title>
+    <meta name="description" content="Wide-column NoSQL databases like Apache Cassandra, ScyllaDB, and Google Cloud Bigtable achieve exceptional throughput by converting potentially random read and write operations into continuous, sequential disk operations. By combining in-memory buffering,">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/how-wide-column-no-sql-optimizes-sequential-i-o">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Wide-Column NoSQL Optimizes Sequential I/O - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/how-wide-column-no-sql-optimizes-sequential-i-o" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Wide-column NoSQL databases like Apache Cassandra, ScyllaDB, and Google Cloud Bigtable achieve exceptional throughput by converting potentially random read and write operations into continuous, sequential disk operations. By combining in-memory buffering," />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-wide-column-nosql-optimizes-sequential-io">How Wide-Column
+NoSQL Optimizes Sequential I/O</h1>
+<p>Wide-column NoSQL databases like Apache Cassandra, ScyllaDB, and
+Google Cloud Bigtable achieve exceptional throughput by converting
+potentially random read and write operations into continuous, sequential
+disk operations. By combining in-memory buffering, immutable
+Log-Structured Merge-trees (LSM-trees), and sorted on-disk file
+structures (SSTables), these engines align their storage architecture
+directly with the physical strengths of modern storage media. This
+article explains how wide-column stores structure their internal
+components to eliminate random disk overwrites, lay out related data
+contiguously, and maximize sequential input/output (I/O)
+performance.</p>
+<h3 id="the-write-path-append-only-logging-and-in-memory-buffers">The
+Write Path: Append-Only Logging and In-Memory Buffers</h3>
+<p>Wide-column engines avoid in-place data updates entirely during the
+write lifecycle. When a write request arrives, the engine performs two
+immediate operations:</p>
+<ol type="1">
+<li><strong>Commit Log (Write-Ahead Log):</strong> The operation is
+immediately appended to an append-only log on disk. Because the log only
+receives additions at the end of the file, disk heads (or SSD block
+controllers) perform pure sequential writes, avoiding the latency
+penalty of random seeks.</li>
+<li><strong>Memtable:</strong> Simultaneously, the write enters a
+volatile, sorted in-memory data structure called a Memtable. The
+Memtable buffers incoming mutations and maintains them in sorted order
+by partition key and clustering key (column name).</li>
+</ol>
+<p>Because the durable write is append-only and the indexing occurs in
+volatile memory, the database accepts writes at memory speeds and
+sequential disk speeds, completely bypassing the need to locate existing
+records on disk.</p>
+<h3 id="flushing-to-immutable-sstables">Flushing to Immutable
+SSTables</h3>
+<p>When a Memtable fills up or reaches a configured threshold, the
+engine freezes it and flushes its contents to persistent storage as a
+Sorted String Table (SSTable).</p>
+<p>During the flush, data is written out sequentially from start to
+finish. Once written to disk, SSTables are strictly immutable; they are
+never modified or rewritten in-place. If a row is updated or deleted,
+the system writes a new timestamped version or a delete marker (a
+"tombstone") to a new SSTable. This append-only discipline ensures that
+disk writes remain 100% sequential throughout the lifetime of the
+database.</p>
+<h3 id="physical-on-disk-layout-contiguous-cell-organization">Physical
+On-Disk Layout: Contiguous Cell Organization</h3>
+<p>Inside an SSTable, data is physically structured to minimize random
+head movement or fragmented block reads:</p>
+<ul>
+<li><strong>Row and Cell Ordering:</strong> Data is grouped first by
+partition key, then sorted by clustering keys. Columns within a row are
+stored together sequentially on disk.</li>
+<li><strong>Range Scans:</strong> Because rows sharing partition
+boundaries or clustering prefixes are physically adjacent, a query
+requesting a time-series range or a set of columns can read contiguous
+sectors of the disk in a single continuous stream rather than jumping
+across disparate disk blocks.</li>
+<li><strong>Companion Index and Filter Files:</strong> Each data file is
+accompanied by a Bloom filter (held in memory to confirm if an SSTable
+contains a partition key) and an index file. The index maps partition
+keys to their exact byte offsets within the sequential data file.</li>
+</ul>
+<h3 id="sequential-read-execution">Sequential Read Execution</h3>
+<p>When reading data, the database uses its memory-resident Bloom
+filters and partition summaries to identify the exact SSTables
+containing the requested partition.</p>
+<p>Once identified, the engine uses the partition index to execute a
+single seek directly to the byte offset where the partition begins. From
+that offset forward, the storage engine streams the required rows or
+columns sequentially. The engine reads ahead full blocks into the
+operating system page cache, maximizing sequential read throughput and
+hardware prefetching capabilities.</p>
+<h3 id="compaction-merging-without-random-writes">Compaction: Merging
+Without Random Writes</h3>
+<p>Because SSTables are immutable, multiple versions of a row can exist
+across different files. Wide-column engines resolve this through a
+continuous background maintenance process called compaction.</p>
+<p>Compaction functions like a multi-way merge sort. The engine reads
+two or more SSTables sequentially from beginning to end, compares their
+sorted keys, eliminates obsolete timestamps and tombstones, and writes
+the consolidated result out to an entirely new SSTable sequentially. Old
+SSTables are deleted in their entirety once the new file is closed. This
+design ensures that defragmentation and garbage collection are executed
+using high-speed streaming I/O rather than unpredictable in-place disk
+modifications.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/how-wide-column-no-sql-optimizes-sequential-i-o';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>When to Horizontally Scale a NoSQL Database Cluster - nosql</title>
+    <meta name="description" content="Identifying the right time to horizontally scale (scale out) a NoSQL database cluster is critical for maintaining system responsiveness, high availability, and operational efficiency. This article outlines the key performance, operational, and storage met">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/when-to-horizontally-scale-a-no-sql-database-cluster">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="When to Horizontally Scale a NoSQL Database Cluster - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/when-to-horizontally-scale-a-no-sql-database-cluster" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Identifying the right time to horizontally scale (scale out) a NoSQL database cluster is critical for maintaining system responsiveness, high availability, and operational efficiency. This article outlines the key performance, operational, and storage met" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="when-to-horizontally-scale-a-nosql-database-cluster">When to
+Horizontally Scale a NoSQL Database Cluster</h1>
+<p>Identifying the right time to horizontally scale (scale out) a NoSQL
+database cluster is critical for maintaining system responsiveness, high
+availability, and operational efficiency. This article outlines the key
+performance, operational, and storage metrics—including resource
+saturation, latency degradation, queue depths, and data distribution
+patterns—that indicate your current cluster configuration has reached
+its limits and requires the addition of more nodes to partition
+workloads effectively.</p>
+<h3 id="1-sustained-high-cpu-and-memory-usage">1. Sustained High CPU and
+Memory Usage</h3>
+<p>When individual nodes within the cluster consistently operate above
+70% to 80% CPU utilization during normal or peak traffic, the database
+struggles to handle parallel query processing, compaction, and internal
+replication tasks. Similarly, if memory utilization reaches thresholds
+where the database's internal cache (such as RocksDB or WiredTiger
+cache) is routinely exhausted, nodes begin to rely heavily on disk
+reads, dramatically decreasing overall throughput. Adding more nodes
+distributes the compute and caching workload across a broader pool of
+hardware resources.</p>
+<h3 id="2-spiking-read-and-write-latencies-p95-and-p99">2. Spiking Read
+and Write Latencies (P95 and P99)</h3>
+<p>Average latency can often mask severe performance degradation.
+Monitoring 95th and 99th percentile (P95/P99) read and write latencies
+provides an accurate picture of database performance. A sustained,
+non-temporary upward trend in P99 latency indicates that the cluster's
+nodes are experiencing resource contention. If write latencies increase
+alongside read latencies without any underlying infrastructure failures,
+the cluster is unable to ingest and persist data concurrently at the
+current node capacity.</p>
+<h3 id="3-high-disk-iops-and-elevated-queue-depths">3. High Disk IOPS
+and Elevated Queue Depths</h3>
+<p>NoSQL databases rely heavily on fast storage access, particularly for
+write-heavy engines utilizing Log-Structured Merge-trees (LSM) that
+require background compaction. Key indicators of storage bottlenecking
+include:</p>
+<ul>
+<li><strong>IOPS Saturation:</strong> Approaching the maximum read/write
+Input/Output Operations Per Second supported by the underlying storage
+tier.</li>
+<li><strong>High Disk Queue Length:</strong> An increasing number of I/O
+requests waiting to be handled by the physical disk.</li>
+<li><strong>High Disk Utilization (%util):</strong> Storage devices
+consistently reporting near 100% active time.</li>
+</ul>
+<p>Adding nodes distributes the I/O workload and data storage across
+separate physical drives, effectively lowering individual disk
+contention.</p>
+<h3 id="4-storage-capacity-thresholds">4. Storage Capacity
+Thresholds</h3>
+<p>Most distributed NoSQL systems (such as Apache Cassandra, MongoDB, or
+ScyllaDB) require substantial free disk space for maintenance
+operations, data repair, and compaction tasks. When individual nodes
+reach 60% to 70% of total disk capacity, horizontal scaling becomes
+necessary. Leaving insufficient headroom risks catastrophic node
+failures during automated compaction or re-indexing operations.</p>
+<h3 id="5-client-request-queuing-and-connection-exhaustion">5. Client
+Request Queuing and Connection Exhaustion</h3>
+<p>When client applications report connection timeouts, pool exhaustion,
+or dropped requests, the database nodes are failing to process inbound
+queries at the ingestion rate. Internal thread pools (such as read/write
+worker queues) will show continuous backpressure and elevated queue
+depths. Horizontal scaling adds additional coordination points and
+execution threads to absorb concurrent client connections.</p>
+<h3 id="6-high-node-to-node-data-transfer-and-network-saturation">6.
+High Node-to-Node Data Transfer and Network Saturation</h3>
+<p>A cluster near capacity will often exhibit high network interface
+utilization due to client traffic compounded by cross-node replication,
+gossip protocols, and data repair streams. If network interface
+bandwidth on individual nodes consistently reaches hardware limits, the
+cluster cannot reliably propagate writes or synchronize data between
+replicas, necessitating distribution of the workload across a wider
+cluster footprint.</p>
+<h3 id="7-partition-hotspotting-and-unbalanced-node-load">7. Partition
+Hotspotting and Unbalanced Node Load</h3>
+<p>While hotspotting can occasionally be traced back to poor partition
+key design, organic growth of active keys can also cause specific shards
+to receive disproportionate amounts of traffic. If one or more nodes
+consistently show higher throughput and resource consumption than the
+rest of the cluster despite an even data distribution, adding nodes
+enables more granular data partitioning and re-sharding, spreading the
+high-volume traffic across more physical instances.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/when-to-horizontally-scale-a-no-sql-database-cluster';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

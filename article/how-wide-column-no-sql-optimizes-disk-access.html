@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Wide-Column NoSQL Optimizes Disk Access - nosql</title>
+    <meta name="description" content="Wide-column NoSQL databases achieve high write and read throughput by converting potentially random disk I/O operations into predictable, sequential disk access. Utilizing Log-Structured Merge-tree (LSM-tree) architectures, append-only logs, and immutable">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/how-wide-column-no-sql-optimizes-disk-access">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Wide-Column NoSQL Optimizes Disk Access - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/how-wide-column-no-sql-optimizes-disk-access" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Wide-column NoSQL databases achieve high write and read throughput by converting potentially random disk I/O operations into predictable, sequential disk access. Utilizing Log-Structured Merge-tree (LSM-tree) architectures, append-only logs, and immutable" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-wide-column-nosql-optimizes-disk-access">How Wide-Column
+NoSQL Optimizes Disk Access</h1>
+<p>Wide-column NoSQL databases achieve high write and read throughput by
+converting potentially random disk I/O operations into predictable,
+sequential disk access. Utilizing Log-Structured Merge-tree (LSM-tree)
+architectures, append-only logs, and immutable file structures like
+Sorted String Tables (SSTables), these databases systematically
+eliminate in-place disk updates. This design maximizes hardware
+bandwidth, minimizes mechanical disk head latency on hard drives, and
+reduces write amplification on solid-state drives (SSDs).</p>
+<h3 id="the-inefficiency-of-in-place-updates">The Inefficiency of
+In-Place Updates</h3>
+<p>Traditional relational databases typically rely on B-tree storage
+engines. When data changes, a B-tree modifies pages directly on disk.
+Because keys are updated in-place across arbitrary locations, the
+storage device must execute expensive random seeks. While random reads
+and writes are fast in modern NVMe drives compared to legacy spinning
+disks, sequential access remains substantially faster and preserves SSD
+longevity. Wide-column databases avoid in-place modifications entirely
+to bypass these physical bottlenecks.</p>
+<h3 id="append-only-write-ahead-logging">Append-Only Write-Ahead
+Logging</h3>
+<p>When a wide-column database receives a write request, it performs two
+immediate operations:</p>
+<ol type="1">
+<li><strong>Sequential Append to the Commit Log:</strong> The
+transaction is appended to the end of an on-disk commit log (or
+Write-Ahead Log). Because the database only writes to the tail of the
+file, the drive executes a pure sequential write, achieving near-peak
+disk bus speed without seeking.</li>
+<li><strong>Buffering in Memory (Memtable):</strong> Simultaneously, the
+data is stored in a volatile, in-memory structure known as a Memtable,
+where writes are organized and sorted by partition key, clustering
+column, and timestamp.</li>
+</ol>
+<p>By pairing an append-only disk log for durability with an in-memory
+buffer for sorting, the write path requires no random disk
+operations.</p>
+<h3 id="flushing-sorted-string-tables-sstables">Flushing Sorted String
+Tables (SSTables)</h3>
+<p>Once a Memtable reaches its capacity limit, the database freezes it
+and flushes its contents to persistent storage as a new SSTable (or
+HFile in Apache HBase).</p>
+<p>Because the Memtable is already sorted in memory, the database writes
+the entire SSTable to disk sequentially in a single, continuous stream.
+Once written, SSTables are immutable—they are never modified, appended
+to, or updated in-place. Immutability guarantees that disk operations
+remain strictly sequential during creation, preventing filesystem
+fragmentation and locking contention.</p>
+<h3 id="sequential-read-paths-and-indexing">Sequential Read Paths and
+Indexing</h3>
+<p>While optimized primarily for writes, the sequential layout also
+benefits read operations:</p>
+<ul>
+<li><strong>Sorted Key Order:</strong> Because data within an SSTable is
+arranged in strict sorted order, range scans read contiguous blocks of
+data sequentially off disk rather than jumping between fragmented
+pages.</li>
+<li><strong>Primary and Summary Indexes:</strong> Small, sequentially
+mapped index files allow the database to locate specific byte offsets
+quickly. Disk reads seek once to the starting offset and then read
+sequentially forward.</li>
+<li><strong>Bloom Filters:</strong> In-memory Bloom filters tell the
+read path whether an SSTable definitely does not contain a specific key,
+preventing unnecessary disk access altogether.</li>
+</ul>
+<h3 id="background-compaction">Background Compaction</h3>
+<p>Over time, multiple SSTables accumulate, potentially containing
+duplicate records, overwrites, or deleted rows marked by "tombstones."
+To reclaim space and maintain read speed, wide-column systems execute
+background compaction.</p>
+<p>During compaction, the database uses a merge-sort algorithm to read
+two or more SSTables concurrently. Because the inputs are already
+sorted, the system streams them sequentially from disk, drops stale
+versions and tombstones, and writes the consolidated output to a new
+SSTable as another sequential stream. The old files are then unlinked in
+bulk, avoiding fragmented file holes.</p>
+<p>Through this combination of append-only logging, immutable file
+flushing, and streaming compaction, wide-column NoSQL databases
+guarantee that heavy read-write workloads interact with storage media
+through high-speed sequential operations.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/how-wide-column-no-sql-optimizes-disk-access';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NoSQL Partial Updates on Nested Document Arrays - nosql</title>
+    <meta name="description" content="This article explores how document-oriented NoSQL databases process partial updates on arrays containing nested subdocuments. Modern document stores avoid the costly anti-pattern of rewriting entire documents by using dot notation, path expressions, posit">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/no-sql-partial-updates-on-nested-document-arrays">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="NoSQL Partial Updates on Nested Document Arrays - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/no-sql-partial-updates-on-nested-document-arrays" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explores how document-oriented NoSQL databases process partial updates on arrays containing nested subdocuments. Modern document stores avoid the costly anti-pattern of rewriting entire documents by using dot notation, path expressions, posit" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="nosql-partial-updates-on-nested-document-arrays">NoSQL Partial
+Updates on Nested Document Arrays</h1>
+<p>This article explores how document-oriented NoSQL databases process
+partial updates on arrays containing nested subdocuments. Modern
+document stores avoid the costly anti-pattern of rewriting entire
+documents by using dot notation, path expressions, positional operators,
+and engine-level atomic modifications. Below is a breakdown of how these
+engines identify target elements, apply granular changes, manage
+internal storage mutations, and ensure concurrency control during
+partial updates.</p>
+<h3 id="targeted-path-traversal-and-positional-operators">Targeted Path
+Traversal and Positional Operators</h3>
+<p>Document databases such as MongoDB, Couchbase, and Amazon DynamoDB
+locate specific nested array items using structured path expressions.
+Instead of passing the entire array back to the client, the client
+specifies a query condition alongside an update operation.</p>
+<p>Engines rely on positional operators to update matched elements:</p>
+<ul>
+<li><strong>First Matched Element (<code>$</code>):</strong> Identifies
+the first array element that meets the query criteria and applies
+changes only to specified keys inside that subdocument.</li>
+<li><strong>All Matched Elements
+(<code>$[&lt;identifier&gt;]</code>):</strong> Evaluates an array filter
+expression against every subdocument in the array, applying
+modifications to all elements that satisfy the condition.</li>
+<li><strong>All Elements (<code>$[]</code>):</strong> Applies the
+partial update uniformly to every nested document in the array.</li>
+</ul>
+<h3 id="atomic-operation-execution-at-the-engine-level">Atomic Operation
+Execution at the Engine Level</h3>
+<p>When a database receives a partial update command targeting a nested
+array, it executes the operation atomically at the document level:</p>
+<ol type="1">
+<li><strong>In-Memory Traversal:</strong> The storage engine reads the
+document into memory and parses its binary format (such as BSON in
+MongoDB or Ion in DynamoDB).</li>
+<li><strong>Expression Evaluation:</strong> The engine walks the
+document’s abstract syntax tree to find the array, iterates over its
+entries, and evaluates the update filter conditions against the nested
+fields.</li>
+<li><strong>In-Place Field Patching:</strong> If the update only changes
+scalar values or adds fields without altering the array's order, the
+engine modifies the specific byte offset in the internal document
+representation.</li>
+<li><strong>Log Ahead/Journaling:</strong> The engine writes the delta
+change to the Write-Ahead Log (WAL) or journal, ensuring durability
+before marking the operation complete.</li>
+</ol>
+<h3 id="array-mutation-mechanics-additions-and-removals">Array Mutation
+Mechanics: Additions and Removals</h3>
+<p>Modifying the structure of a nested array requires different handling
+than changing existing values:</p>
+<ul>
+<li><strong>Push Operations:</strong> Appending an element to a nested
+array checks whether the document has pre-allocated contiguous space. If
+space permits, the engine appends the subdocument. If the allocated
+boundary is exceeded, the storage engine must reallocate and move the
+document elsewhere on disk, updating internal index pointers.</li>
+<li><strong>Pull and Filter Removals:</strong> Deleting a nested
+subdocument causes the remaining elements in the array to shift left.
+Engines rewrite the array payload and mark the newly freed space as
+reusable within the document's allocation block.</li>
+</ul>
+<h3 id="concurrency-and-document-level-locking">Concurrency and
+Document-Level Locking</h3>
+<p>Document NoSQL engines generally enforce atomicity and isolation at
+the single-document level:</p>
+<ul>
+<li><strong>Pessimistic/Row-Level Locks:</strong> Engines like
+WiredTiger lock the specific document while evaluating array filters and
+writing modifications. Concurrent updates to different parts of the same
+array are queued, preventing lost updates or race conditions.</li>
+<li><strong>Optimistic Concurrency Control (OCC):</strong> Engines like
+DynamoDB evaluate conditional expressions (e.g., matching a version
+field or specific array state). If another transaction modifies the
+nested array between the read and write stages, the update rejects with
+a transaction conflict, requiring the client to retry.</li>
+</ul></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/no-sql-partial-updates-on-nested-document-arrays';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

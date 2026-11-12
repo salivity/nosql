@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Backing Up Relational vs Distributed NoSQL Databases - nosql</title>
+    <meta name="description" content="Backing up and recovering data differs significantly between monolithic relational database management systems (RDBMS) and distributed NoSQL platforms due to fundamental architectural differences. Monolithic RDBMS architectures rely on centralized storage">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/backing-up-relational-vs-distributed-no-sql-databases">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Backing Up Relational vs Distributed NoSQL Databases - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/backing-up-relational-vs-distributed-no-sql-databases" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Backing up and recovering data differs significantly between monolithic relational database management systems (RDBMS) and distributed NoSQL platforms due to fundamental architectural differences. Monolithic RDBMS architectures rely on centralized storage" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="backing-up-relational-vs-distributed-nosql-databases">Backing Up
+Relational vs Distributed NoSQL Databases</h1>
+<p>Backing up and recovering data differs significantly between
+monolithic relational database management systems (RDBMS) and
+distributed NoSQL platforms due to fundamental architectural
+differences. Monolithic RDBMS architectures rely on centralized storage
+and strict ACID compliance, enabling precise, centralized point-in-time
+recovery via transaction logs and sequential snapshots. Conversely,
+distributed NoSQL databases scale horizontally across multiple nodes
+with sharded datasets and eventual consistency models, necessitating
+decentralized backup strategies, node-level coordination, and complex
+restoration procedures. Understanding these differences is critical for
+designing resilient disaster recovery workflows tailored to each
+database paradigm.</p>
+<h2 id="consistency-and-state-capture">Consistency and State
+Capture</h2>
+<p>The primary operational difference between the two paradigms lies in
+how data consistency is achieved during a backup.</p>
+<ul>
+<li><strong>Monolithic RDBMS:</strong> Relational stores like
+PostgreSQL, MySQL, and Oracle prioritize ACID (Atomicity, Consistency,
+Isolation, Durability) transactions. Because all writes funnel through a
+single master node, capturing a globally consistent state is
+straightforward. The database engine can freeze writes briefly, leverage
+copy-on-write storage snapshots, or record a precise Log Sequence Number
+(LSN) from the Write-Ahead Log (WAL) to ensure that the backup reflects
+a single, exact moment in time.</li>
+<li><strong>Distributed NoSQL:</strong> Distributed systems like Apache
+Cassandra, MongoDB (sharded), or Apache HBase prioritize horizontal
+scalability and partition tolerance, often operating under eventual
+consistency. Capturing a cluster-wide, instantaneous point-in-time
+snapshot without pausing client traffic is practically impossible due to
+network latency and clock skew across nodes. Backups are generally taken
+at the individual node level (for example, taking local hard-link
+snapshots of SSTables in Cassandra). The resulting backup captures
+overlapping time intervals across partitions rather than a synchronized
+global state.</li>
+</ul>
+<h2 id="backup-mechanics-physical-vs-logical-vs-distributed">Backup
+Mechanics: Physical vs. Logical vs. Distributed</h2>
+<p>Backup extraction techniques vary according to how each system stores
+data on disk.</p>
+<ul>
+<li><strong>Monolithic Systems:</strong> RDBMS backups fall into two
+main categories:
+<ul>
+<li><em>Logical Backups:</em> Exporting schemas and rows as SQL
+statements (e.g., <code>pg_dump</code>, <code>mysqldump</code>). These
+are human-readable but slow for large datasets.</li>
+<li><em>Physical Backups:</em> Copying the raw database files or taking
+volume-level snapshots (e.g., AWS EBS snapshots) while streaming the
+transaction log. Physical backups are fast and allow the database to
+track structural disk integrity.</li>
+</ul></li>
+<li><strong>Distributed NoSQL Platforms:</strong> NoSQL databases use
+distributed approaches:
+<ul>
+<li><em>Node-Level Snapshots:</em> Tools initiate parallel commands
+across all cluster members to flush in-memory data (like Memtables) to
+disk and create filesystem-level links to immutable data files.</li>
+<li><em>Metadata and Schema Tracking:</em> Alongside data files, the
+backup process must record cluster state, token ranges, schema
+definitions, and partition maps to ensure data can be placed correctly
+upon recovery.</li>
+<li><em>Change Data Capture (CDC):</em> Because streaming large volumes
+of log files across hundreds of nodes can saturate network links, NoSQL
+platforms often rely on CDC pipelines or message brokers to persist
+write streams externally for recovery purposes.</li>
+</ul></li>
+</ul>
+<h2 id="restoration-and-point-in-time-recovery-pitr">Restoration and
+Point-in-Time Recovery (PITR)</h2>
+<p>Restoring data highlights the most critical procedural divergences
+between the two database models.</p>
+<ul>
+<li><strong>Monolithic RDBMS Recovery:</strong>
+<ul>
+<li><em>Process:</em> The administrator provisions a target server,
+restores the base physical backup, and mounts the filesystem.</li>
+<li><em>Point-in-Time Recovery (PITR):</em> By replaying sequential
+WAL/redo logs forward from the base backup timestamp, an operator can
+stop at an exact millisecond or transaction ID. This makes RDBMS ideal
+for recovering from accidental data modifications or localized
+corruption.</li>
+</ul></li>
+<li><strong>Distributed NoSQL Recovery:</strong>
+<ul>
+<li><em>Process:</em> Restoring a distributed platform requires
+re-establishing a cluster topology. If the node count or token
+distribution changes between backup and restore, data must be reshuffled
+(re-sharded), which demands massive compute and I/O resources.</li>
+<li><em>Consistency Reconciliation:</em> Because the restored node
+snapshots represent slightly different moments in time, the database
+must run repair operations (such as anti-entropy repair) across the
+cluster post-restore. This ensures replica synchronization and
+eliminates tombstones (markers for deleted data) that might otherwise
+cause deleted records to reappear.</li>
+<li><em>Lack of True PITR:</em> True, transactional cluster-wide
+rollbacks are rare in NoSQL. Recovery is typically
+coarse-grained—restoring to a snapshot window rather than an exact
+microsecond—unless paired with continuous event streaming or external
+ledger systems.</li>
+</ul></li>
+</ul>
+<h2 id="operational-complexity-and-resource-management">Operational
+Complexity and Resource Management</h2>
+<p>Managing backups at scale introduces contrasting operational
+overheads:</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th style="text-align: left;">Feature</th>
+<th style="text-align: left;">Monolithic Relational</th>
+<th style="text-align: left;">Distributed NoSQL</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><strong>Coordination</strong></td>
+<td style="text-align: left;">Single-node agent or disk snapshot.</td>
+<td style="text-align: left;">Central orchestrator targeting dozens or
+hundreds of nodes simultaneously.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Impact on Production</strong></td>
+<td style="text-align: left;">High I/O and potential lock contention on
+the primary or dedicated replica.</td>
+<td style="text-align: left;">Distributed I/O load, but can degrade
+cluster performance if network-wide transfers overlap.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Storage Consumption</strong></td>
+<td style="text-align: left;">Centralized repository; compression and
+deduplication are straightforward.</td>
+<td style="text-align: left;">High data volume due to inherent
+replication; deduplication across nodes is required to prevent storing
+redundant replicas.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Tooling</strong></td>
+<td style="text-align: left;">Native utilities (<code>pgBackRest</code>,
+<code>RMAN</code>, <code>Percona XtraBackup</code>).</td>
+<td style="text-align: left;">Distributed frameworks
+(<code>Medusa</code> for Cassandra, automated cloud service APIs, custom
+cron orchestrators).</td>
+</tr>
+</tbody>
+</table></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/backing-up-relational-vs-distributed-no-sql-databases';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

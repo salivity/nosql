@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How NoSQL Handles Millions of Writes Per Second - nosql</title>
+    <meta name="description" content="Modern NoSQL databases achieve massive write throughput by abandoning traditional relational database constraints in favor of distributed, memory-centric, and append-only architectures. By eliminating global locks, deferring disk serialization through Log">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/how-no-sql-handles-millions-of-writes-per-second">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How NoSQL Handles Millions of Writes Per Second - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/how-no-sql-handles-millions-of-writes-per-second" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Modern NoSQL databases achieve massive write throughput by abandoning traditional relational database constraints in favor of distributed, memory-centric, and append-only architectures. By eliminating global locks, deferring disk serialization through Log" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-nosql-handles-millions-of-writes-per-second">How NoSQL
+Handles Millions of Writes Per Second</h1>
+<p>Modern NoSQL databases achieve massive write throughput by abandoning
+traditional relational database constraints in favor of distributed,
+memory-centric, and append-only architectures. By eliminating global
+locks, deferring disk serialization through Log-Structured Merge-trees
+(LSM-trees), partitioning workloads horizontally across commodity
+hardware, and adopting relaxed consistency models, these systems
+reliably ingest millions of writes per second without sacrificing fault
+tolerance.</p>
+<h3 id="append-only-architecture-and-lsm-trees">Append-Only Architecture
+and LSM-Trees</h3>
+<p>Traditional relational databases rely on B-Trees, which require
+in-place updates on disk. This results in costly random I/O operations
+that degrade throughput under heavy write loads. In contrast, many
+write-heavy NoSQL databases (such as Apache Cassandra, ScyllaDB, and
+RocksDB) utilize Log-Structured Merge-trees (LSM-trees).</p>
+<p>Under an LSM-tree architecture, incoming writes bypass random disk
+writes entirely:</p>
+<ol type="1">
+<li><strong>Write-Ahead Log (WAL):</strong> The write is sequentially
+appended to an immutable log file on disk to guarantee durability in the
+event of an abrupt node failure. Sequential disk writes are orders of
+magnitude faster than random writes, even on modern NVMe drives.</li>
+<li><strong>In-Memory Buffering (MemTable):</strong> Simultaneously, the
+data is written to an in-memory sorted structure (the MemTable). Once
+the write hits both the WAL and the MemTable, the database acknowledges
+the operation as successful.</li>
+<li><strong>Flushing to SSTables:</strong> When the MemTable reaches
+capacity, it flushes sequentially to disk as an immutable Sorted String
+Table (SSTable). Background compaction threads later merge and clean up
+redundant data asynchronously, removing write amplification from the
+critical request path.</li>
+</ol>
+<h3 id="horizontal-partitioning-and-sharding">Horizontal Partitioning
+and Sharding</h3>
+<p>No single server can ingest millions of writes per second
+indefinitely. NoSQL databases scale horizontally by distributing the
+data across a cluster using consistent hashing.</p>
+<p>A partition key determines which node or partition owns a specific
+record. When a client sends a write request:</p>
+<ul>
+<li>A lightweight routing layer or cluster-aware client driver maps the
+partition key to the designated primary node.</li>
+<li>Workloads are distributed uniformly across dozens or hundreds of
+nodes, avoiding hot spots.</li>
+<li>Each node operates independently, allowing total write capacity to
+scale linearly as new nodes join the cluster.</li>
+</ul>
+<h3 id="shared-nothing-architecture">Shared-Nothing Architecture</h3>
+<p>High-throughput NoSQL engines use a shared-nothing architecture where
+individual nodes do not share RAM, disk, or CPU resources. This
+eliminates distributed lock contention, cross-server bus bottlenecks,
+and single points of failure. Coordination overhead is minimized,
+allowing each machine to dedicate its hardware resources strictly to
+processing incoming writes.</p>
+<h3 id="tunable-consistency-and-asynchronous-replication">Tunable
+Consistency and Asynchronous Replication</h3>
+<p>Enforcing immediate consistency (ACID guarantees) across a
+distributed cluster requires two-phase commits (2PC) or distributed
+locking, both of which introduce catastrophic network latency.</p>
+<p>NoSQL stores bypass this through tunable consistency models based on
+the CAP theorem:</p>
+<ul>
+<li><strong>Asynchronous Replication:</strong> A write can be committed
+and acknowledged as soon as the local node processes it, replicating to
+peer nodes in the background.</li>
+<li><strong>Quorum Writes:</strong> Systems using Dynamo-style designs
+allow clients to define their consistency level per write (e.g.,
+<code>ANY</code>, <code>ONE</code>, or <code>QUORUM</code>). By
+requiring acknowledgment from only one or a minority of replica nodes,
+the database protects the write path from slow, lagging, or unreachable
+nodes.</li>
+</ul>
+<h3 id="lightweight-concurrency-and-thread-per-core-design">Lightweight
+Concurrency and Thread-per-Core Design</h3>
+<p>Modern NoSQL implementations optimize low-level operating system
+interactions to maximize hardware saturation. Systems like ScyllaDB
+implement an asynchronous, thread-per-core architecture that binds
+single execution threads to specific CPU cores. By eliminating context
+switching, kernel locks, and thread contention, the database ensures
+that CPU pipelines run at peak efficiency, translating raw compute power
+directly into continuous, high-volume write ingestion.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/how-no-sql-handles-millions-of-writes-per-second';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

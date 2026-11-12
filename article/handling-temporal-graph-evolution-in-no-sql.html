@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Handling Temporal Graph Evolution in NoSQL - nosql</title>
+    <meta name="description" content="This article explores how graph NoSQL platforms track and manage temporal graph evolution over historical intervals. As relationships, nodes, and attributes shift over time, standard graph databases struggle with historical queries. Modern graph databases">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/handling-temporal-graph-evolution-in-no-sql">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Handling Temporal Graph Evolution in NoSQL - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/handling-temporal-graph-evolution-in-no-sql" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explores how graph NoSQL platforms track and manage temporal graph evolution over historical intervals. As relationships, nodes, and attributes shift over time, standard graph databases struggle with historical queries. Modern graph databases" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="handling-temporal-graph-evolution-in-nosql">Handling Temporal
+Graph Evolution in NoSQL</h1>
+<p>This article explores how graph NoSQL platforms track and manage
+temporal graph evolution over historical intervals. As relationships,
+nodes, and attributes shift over time, standard graph databases struggle
+with historical queries. Modern graph databases resolve this by
+implementing point-in-time snapshots, interval-based attribute
+versioning, event sourcing, and specialized temporal indexing, enabling
+efficient historical state reconstruction and time-aware path
+traversals.</p>
+<h3 id="snapshot-based-graph-versioning">Snapshot-Based Graph
+Versioning</h3>
+<p>The snapshot approach captures the complete topology and property
+state of a graph at discrete moments in time. Graph platforms accomplish
+this either through full graph duplication or incremental delta
+snapshots.</p>
+<ul>
+<li><strong>Full Snapshots:</strong> Capture an entirely independent
+graph state at a fixed interval. While simple to query, this approach
+leads to significant storage overhead and misses rapid state transitions
+that occur between intervals.</li>
+<li><strong>Delta Snapshots:</strong> Only store changes (added,
+updated, or deleted nodes and edges) relative to a base snapshot. This
+minimizes disk space while allowing the platform to reconstruct the
+graph state for any specific timestamp by applying deltas to the nearest
+base snapshot.</li>
+</ul>
+<h3 id="interval-based-property-and-topology-versioning">Interval-Based
+Property and Topology Versioning</h3>
+<p>A prevalent native model involves embedding time ranges directly into
+graph elements. Instead of duplicating graphs, nodes and edges maintain
+validity intervals via properties like <code>valid_from</code> and
+<code>valid_to</code> (or <code>tx_start</code> and <code>tx_end</code>
+for bitemporal graphs).</p>
+<ul>
+<li><strong>Valid Time vs. Transaction Time:</strong> Valid time
+represents when a fact was true in the real world, whereas transaction
+time indicates when the fact was recorded in the database. Platforms
+supporting bitemporal data store both pairs of timestamps to allow
+historical tracking and retroactively corrected data auditing.</li>
+<li><strong>Edge Evolution:</strong> If an edge between two entities
+ceases to exist, it is not physically deleted. Instead, its
+<code>valid_to</code> property is updated with the termination
+timestamp. New relationships with different properties create new
+versioned edges, preserving the full timeline of connections.</li>
+</ul>
+<h3 id="event-sourcing-and-immutable-log-architecture">Event Sourcing
+and Immutable Log Architecture</h3>
+<p>Certain distributed NoSQL graphs decouple the storage engine into an
+immutable, append-only log of graph mutations (create, update, delete
+events).</p>
+<ul>
+<li>In this architecture, the current state of a node or edge is a
+materialized view derived from the sequence of events affecting it.</li>
+<li>To query a historical state, the query engine evaluates the log up
+to time <span class="math inline">\(T\)</span>, or queries dedicated
+point-in-time materialized views cached by background compaction
+routines. This guarantees an exact audit trail and eliminates write
+conflicts during rapid historical data ingestion.</li>
+</ul>
+<h3 id="structural-sharing-and-persistent-trees">Structural Sharing and
+Persistent Trees</h3>
+<p>To optimize storage and traversal speed, modern platforms use
+persistent data structures with structural sharing (such as versioned
+B-trees, LSM-trees, or immutable Adjacency Lists).</p>
+<ul>
+<li>When a graph topology changes at timestamp <span
+class="math inline">\(t_{new}\)</span>, the database only creates new
+nodes along the affected path in the underlying storage tree.</li>
+<li>Unmodified branches and subgraphs are shared between the historical
+version and the new version. This allows instant point-in-time checkouts
+without duplicating static subgraphs.</li>
+</ul>
+<h3 id="temporal-indexing-and-query-execution">Temporal Indexing and
+Query Execution</h3>
+<p>Standard graph indexes (like hash or traditional B-tree indexes) only
+index current values. Handling temporal intervals requires
+multi-dimensional indexing schemes:</p>
+<ul>
+<li><strong>Spatial and Multi-Dimensional Indexes:</strong> Adapting
+R-trees or KD-trees to index <code>[valid_from, valid_to]</code>
+intervals alongside vertex and edge identifiers.</li>
+<li><strong>Time-Respecting Traversals:</strong> Traversals over
+historical intervals require algorithms to enforce temporal consistency.
+A "time-respecting path" ensures that each hop along an edge occurs at
+or after the timestamp of the preceding hop, preventing the engine from
+traversing invalid causality chains across time intervals. Platforms
+achieve this by applying temporal predicates pushdown directly at the
+storage engine level during the graph traversal step.</li>
+</ul></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/handling-temporal-graph-evolution-in-no-sql';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

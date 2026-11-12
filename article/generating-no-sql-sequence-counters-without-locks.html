@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generating NoSQL Sequence Counters Without Locks - nosql</title>
+    <meta name="description" content="NoSQL databases scale horizontally by avoiding centralized bottlenecks, making traditional auto-incrementing counters governed by global database locks unfeasible. Instead of relying on a single, cluster-wide lock, distributed architectures generate seque">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/generating-no-sql-sequence-counters-without-locks">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Generating NoSQL Sequence Counters Without Locks - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/generating-no-sql-sequence-counters-without-locks" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="NoSQL databases scale horizontally by avoiding centralized bottlenecks, making traditional auto-incrementing counters governed by global database locks unfeasible. Instead of relying on a single, cluster-wide lock, distributed architectures generate seque" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="generating-nosql-sequence-counters-without-locks">Generating
+NoSQL Sequence Counters Without Locks</h1>
+<p>NoSQL databases scale horizontally by avoiding centralized
+bottlenecks, making traditional auto-incrementing counters governed by
+global database locks unfeasible. Instead of relying on a single,
+cluster-wide lock, distributed architectures generate sequence numbers
+and counters through decentralized mechanisms such as range-based block
+allocation, partition-level atomic operations, time-and-node compound
+identifiers, and consensus-driven state machines. These strategies
+enable high-throughput counter generation while eliminating single
+points of failure.</p>
+<h3 id="range-based-block-allocation-hilo-pattern">Range-Based Block
+Allocation (Hi/Lo Pattern)</h3>
+<p>One of the most common methods to avoid continuous inter-node
+coordination is the Hi/Lo pattern. In this approach, a centralized
+coordinator or a consensus-backed distributed table assigns large ranges
+of numbers (such as blocks of 1,000 or 10,000 IDs) to individual
+database nodes or application instances.</p>
+<p>Once a node is allocated a block, it increments sequence counters
+locally in-memory without contacting any other node. The database only
+needs to perform an atomic, distributed update when a node exhausts its
+allocated range and requests a new one. This reduces network round-trips
+and locking overhead by multiple orders of magnitude, trading strict,
+cluster-wide consecutive ordering for massively improved write
+throughput.</p>
+<h3 id="partition-level-atomic-operations-and-cas">Partition-Level
+Atomic Operations and CAS</h3>
+<p>Rather than locking an entire database cluster, many NoSQL stores
+localize sequence generation to specific partitions using atomic
+read-modify-write primitives, such as Compare-And-Swap (CAS) or atomic
+counter increments (for example, Redis <code>INCR</code> or DynamoDB
+<code>ADD</code> actions).</p>
+<p>In this model, a specific key or document acts as the counter, and
+requests for that key are routed to the specific node or partition
+replica holding the primary partition lease. Because a single partition
+manages the state, it can serialize updates locally in memory without
+distributed locking across the cluster. If contention occurs across
+multiple clients, optimistic concurrency control (OCC) detects conflicts
+via document versioning and prompts the client to retry.</p>
+<h3
+id="compound-and-time-ordered-sequencing-snowflake-patterns">Compound
+and Time-Ordered Sequencing (Snowflake Patterns)</h3>
+<p>Many modern NoSQL systems replace monolithic, single-number sequence
+counters with decentralized, roughly sequential identifiers using
+variations of the Twitter Snowflake algorithm or ULIDs (Universally
+Unique Lexicographically Sortable Identifiers).</p>
+<p>These 64-bit or 128-bit identifiers are generated independently on
+each node without inter-node network communication:</p>
+<ul>
+<li>A high-order timestamp component ensures chronological sorting
+across the cluster.</li>
+<li>A machine, datacenter, or worker ID component prevents collisions
+between different nodes.</li>
+<li>A local, in-memory sequence number handles collisions occurring
+within the same millisecond on the same node.</li>
+</ul>
+<p>This approach yields k-ordered (roughly time-ordered) unique
+sequences at line-rate speed, completely bypassing the need for locks or
+distributed state synchronization.</p>
+<h3 id="conflict-free-replicated-data-types-crdts">Conflict-Free
+Replicated Data Types (CRDTs)</h3>
+<p>When the goal is tracking an aggregate metric (like page views or
+inventory totals) rather than generating unique row identifiers,
+distributed databases like Apache Cassandra, Riak, and Redis Enterprise
+utilize PN-Counters (Positive-Negative Counters).</p>
+<p>PN-Counters rely on state-based or operation-based CRDT mathematics.
+Each replica maintains its own internal map of increments and decrements
+indexed by replica ID. Replicas update their local counts instantly and
+propagate changes asynchronously in the background. The actual sequence
+value is computed dynamically by taking the sum of all replica values.
+Because operations commute and merge deterministically, write
+availability remains at 100% even during network partitions, entirely
+removing the concept of locks.</p>
+<h3 id="distributed-consensus-state-machines">Distributed Consensus
+State Machines</h3>
+<p>When strictly ordered, gapless sequence numbers are mandatory across
+an entire distributed system, databases rely on consensus protocols such
+as Raft or Paxos rather than classic locking.</p>
+<p>In this setup, sequence updates are modeled as state machine
+transitions. The cluster elects a leader through distributed consensus.
+The leader receives increment requests, writes them to a replicated
+write-ahead log (WAL), and commits the increment once a quorum of nodes
+acknowledges the write. While this introduces network overhead relative
+to pure in-memory counters, it ensures sequential consistency and high
+availability without a static single point of failure or brittle
+database-level locking.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/generating-no-sql-sequence-counters-without-locks';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

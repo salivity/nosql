@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How NoSQL Engines Prevent Thread Contention - nosql</title>
+    <meta name="description" content="High-throughput key-value NoSQL databases maintain ultra-low latency under massive concurrent workloads by minimizing or entirely eliminating shared state between execution threads. To avoid the performance degradation caused by thread contention, CPU con">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/how-no-sql-engines-prevent-thread-contention">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How NoSQL Engines Prevent Thread Contention - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/how-no-sql-engines-prevent-thread-contention" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="High-throughput key-value NoSQL databases maintain ultra-low latency under massive concurrent workloads by minimizing or entirely eliminating shared state between execution threads. To avoid the performance degradation caused by thread contention, CPU con" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-nosql-engines-prevent-thread-contention">How NoSQL Engines
+Prevent Thread Contention</h1>
+<p>High-throughput key-value NoSQL databases maintain ultra-low latency
+under massive concurrent workloads by minimizing or entirely eliminating
+shared state between execution threads. To avoid the performance
+degradation caused by thread contention, CPU context switching, and lock
+synchronization, these engines implement architectural patterns such as
+shared-nothing partitioning, single-threaded event loops, lock-free
+memory structures, and append-only storage engines. This article breaks
+down the primary mechanisms key-value engines use to scale efficiently
+under heavy concurrent traffic.</p>
+<h3 id="shared-nothing-and-thread-per-core-architectures">Shared-Nothing
+and Thread-per-Core Architectures</h3>
+<p>Rather than allowing multiple threads to access a shared global pool
+of memory, modern distributed engines (such as ScyllaDB and Aerospike)
+use a shared-nothing or thread-per-core design. The keyspace is
+deterministically hashed and divided into shards, with each CPU core
+assigned dedicated ownership of a specific shard.</p>
+<p>Each thread runs pinned to its core, managing its own memory, event
+loop, and I/O queues without competing for resources. When a request
+arrives, it is routed directly to the thread responsible for that key.
+Because each core exclusively accesses its own data slice, cross-thread
+synchronization and mutual exclusion locks (mutexes) are removed from
+the critical read/write path.</p>
+<h3 id="single-threaded-event-multiplexing">Single-Threaded Event
+Multiplexing</h3>
+<p>Some in-memory key-value stores, most notably Redis, prevent
+multi-threaded contention by processing data-modifying operations on a
+single execution thread. By using non-blocking I/O multiplexing
+primitives such as <code>epoll</code> or <code>kqueue</code>, the engine
+handles thousands of concurrent network connections simultaneously while
+queuing and executing commands sequentially in memory.</p>
+<p>Because command execution is single-threaded, there are no race
+conditions, deadlocks, or lock-acquisition overheads. As long as
+individual operations execute in sub-millisecond timeframes, the engine
+can sustain hundreds of thousands of operations per second per node.
+Horizontal scaling is achieved by clustering multiple independent
+instances across distinct CPU cores.</p>
+<h3 id="lock-free-in-memory-data-structures">Lock-Free In-Memory Data
+Structures</h3>
+<p>When engines do share memory across worker threads, they replace
+traditional blocking mutexes with lock-free and wait-free data
+structures. Systems like RocksDB rely on lock-free skip lists for their
+in-memory write buffers (MemTables).</p>
+<p>These structures leverage atomic hardware primitives, such as
+Compare-And-Swap (CAS), to update pointers without pausing competing
+threads. Multiple concurrent threads can read and insert key-value pairs
+simultaneously. If a conflict occurs during a CAS operation, only the
+colliding thread retries, allowing all other threads to proceed without
+triggering expensive kernel-level context switches.</p>
+<h3
+id="log-structured-merge-lsm-trees-and-append-only-writes">Log-Structured
+Merge (LSM) Trees and Append-Only Writes</h3>
+<p>Traditional relational databases frequently update data in-place on
+disk pages, requiring complex two-phase locking schemes to prevent
+concurrent writes from corrupting data. Key-value engines predominantly
+use Log-Structured Merge (LSM) trees or append-only logs to avoid
+in-place updates.</p>
+<p>Write requests are sequentially appended to a Write-Ahead Log (WAL)
+and stored in an in-memory MemTable. Because sequential disk writes do
+not require complex locking of existing records, write amplification and
+contention drop significantly. Background compaction threads
+periodically merge sorted string tables (SSTables) asynchronously,
+decoupling disk maintenance from real-time client traffic.</p>
+<h3 id="fine-grained-lock-striping">Fine-Grained Lock Striping</h3>
+<p>When locking is unavoidable, engines avoid coarse global or
+table-wide locks by using lock striping or bucket-level locking. The
+primary hash table is divided into thousands of independent buckets,
+each protected by its own granular lock.</p>
+<p>Concurrent requests typically hash to different buckets, allowing
+hundreds of read and write threads to execute simultaneously without
+interfering with one another. High concurrency is maintained because
+threads only block when attempting to access the exact same narrow
+bucket at the exact same instant.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/how-no-sql-engines-prevent-thread-contention';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

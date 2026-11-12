@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SSTable Splitting in Wide-Column NoSQL Databases - nosql</title>
+    <meta name="description" content="Wide-column NoSQL databases manage growing datasets by pairing immutable storage with background maintenance processes known as compaction. Because Sorted String Tables (SSTables) are strictly read-only once written to disk, databases cannot split an exis">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/ss-table-splitting-in-wide-column-no-sql-databases">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="SSTable Splitting in Wide-Column NoSQL Databases - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/ss-table-splitting-in-wide-column-no-sql-databases" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Wide-column NoSQL databases manage growing datasets by pairing immutable storage with background maintenance processes known as compaction. Because Sorted String Tables (SSTables) are strictly read-only once written to disk, databases cannot split an exis" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="sstable-splitting-in-wide-column-nosql-databases">SSTable
+Splitting in Wide-Column NoSQL Databases</h1>
+<p>Wide-column NoSQL databases manage growing datasets by pairing
+immutable storage with background maintenance processes known as
+compaction. Because Sorted String Tables (SSTables) are strictly
+read-only once written to disk, databases cannot split an existing
+SSTable file in place. Instead, the database uses automated compaction
+cycles to merge overlapping key ranges, purge deleted data, and divide
+large sequential datasets into smaller, balanced SSTable files based on
+predetermined size limits or partition boundaries.</p>
+<h2 id="the-role-of-lsm-trees-and-immutability">The Role of LSM-Trees
+and Immutability</h2>
+<p>Wide-column systems such as Apache Cassandra, ScyllaDB, and Google
+Bigtable rely on Log-Structured Merge-trees (LSM-trees). Writes first
+enter an in-memory buffer (the Memtable) and an append-only commit log.
+When the Memtable fills, the database flushes it to disk as a sorted,
+immutable SSTable.</p>
+<p>Because existing SSTables cannot be modified, data modifications and
+deletions (tombstones) are written as new entries in newer SSTables.
+Over time, this creates fragmentation and duplicate entries across
+multiple files. Automated background compaction resolves this
+fragmentation by continuously reading older SSTables and synthesizing
+their contents into fresh, consolidated files.</p>
+<h2 id="how-the-splitting-mechanism-works-during-compaction">How the
+Splitting Mechanism Works During Compaction</h2>
+<p>SSTable "splitting" occurs naturally as a database streams and
+rewrites sorted data during background compaction. Rather than dividing
+an active file directly, the database performs a sequential streaming
+operation that partitions the output:</p>
+<ol type="1">
+<li><strong>Multi-Way Merge:</strong> The database identifies candidate
+SSTables scheduled for compaction and initializes a multi-way merge sort
+across their sorted keys.</li>
+<li><strong>Filtering:</strong> During the merge, the system evaluates
+timestamps, discards superseded column values, and removes tombstones
+that have exceeded their grace period.</li>
+<li><strong>Threshold Monitoring:</strong> As surviving rows are
+streamed into a new output buffer, an internal counter tracks the
+cumulative byte size or partition count of the file being written.</li>
+<li><strong>Boundary Rollover:</strong> When the output file hits a
+configured target threshold (such as a maximum file size or a primary
+key boundary), the writer finalizes the current SSTable. It generates
+the primary index, bloom filter, and summary file, then immediately
+opens a new, distinct SSTable file to receive the remaining sorted
+records.</li>
+<li><strong>Metadata Update and Cleanup:</strong> Once the entire stream
+has finished writing to the set of newly split SSTables, the database
+commits a metadata transaction (often in a system manifest) to register
+the new files and atomically unlinks the old, larger SSTables.</li>
+</ol>
+<h2 id="splitting-strategies-across-compaction-types">Splitting
+Strategies Across Compaction Types</h2>
+<p>Different compaction strategies handle file boundaries differently
+depending on operational priorities:</p>
+<h3 id="leveled-compaction-lcs">Leveled Compaction (LCS)</h3>
+<p>In Leveled Compaction, data is organized into exponential tiers (L0,
+L1, L2, etc.). Each level from L1 onward represents non-overlapping key
+ranges with fixed-size SSTables (typically 160 MB in Cassandra). When an
+SSTable from L1 merges with overlapping SSTables in L2, the output
+cannot exceed the level's standard size limit. The database continuously
+closes the current SSTable file and opens a new one every time the 160
+MB mark is reached, generating a series of uniformly split,
+non-overlapping SSTables.</p>
+<h3 id="size-tiered-compaction-stcs">Size-Tiered Compaction (STCS)</h3>
+<p>Size-Tiered Compaction groups SSTables of similar sizes together.
+While STCS primarily consolidates smaller files into larger ones, modern
+engines split output files if the resulting merge would exceed maximum
+file-size limits or when executing specialized operations like split
+compactions to alleviate operational overhead.</p>
+<h3 id="region-and-tablet-splitting-bigtable-and-hbase">Region and
+Tablet Splitting (Bigtable and HBase)</h3>
+<p>In systems like Google Bigtable or Apache HBase (which uses HFiles,
+an SSTable variant), datasets are managed across distributed nodes by
+key-range units called tablets or regions. When an individual tablet
+grows beyond a defined storage limit (e.g., several gigabytes), a split
+is triggered.</p>
+<p>During the split operation, the database identifies a midpoint row
+key. Compaction processes write the data below the split key into a new
+tablet's SSTables and the data above the split key into another. This
+redistributes the storage footprint and allows the cluster to move one
+of the split tablets to a different physical node.</p>
+<h2 id="operational-advantages-of-automated-splitting">Operational
+Advantages of Automated Splitting</h2>
+<p>Splitting SSTables during maintenance cycles prevents several
+performance bottlenecks:</p>
+<ul>
+<li><strong>Predictable Read Latency:</strong> Smaller, bounded SSTables
+combined with bloom filters reduce disk seeks, as readers inspect fewer
+index blocks per query.</li>
+<li><strong>Balanced Disk Space Reclamation:</strong> Splitting ensures
+that tombstones are contained within smaller chunks of data, allowing
+the database to clear obsolete disk space more frequently without
+waiting to rewrite massive multi-gigabyte files.</li>
+<li><strong>Efficient Backup and Repair:</strong> Managing data in
+modular, uniformly sized files reduces I/O spikes when streaming data
+between replicas during node repair, rebalancing, or incremental
+backups.</li>
+</ul></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/ss-table-splitting-in-wide-column-no-sql-databases';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

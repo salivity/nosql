@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How NoSQL Databases Handle Array Modifications - nosql</title>
+    <meta name="description" content="Document-oriented NoSQL databases optimize array modifications by avoiding full-document rewrites on disk, preventing performance bottlenecks and high input/output operations. Rather than re-serializing and writing an entire document file whenever an elem">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/how-no-sql-databases-handle-array-modifications">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How NoSQL Databases Handle Array Modifications - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/how-no-sql-databases-handle-array-modifications" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Document-oriented NoSQL databases optimize array modifications by avoiding full-document rewrites on disk, preventing performance bottlenecks and high input/output operations. Rather than re-serializing and writing an entire document file whenever an elem" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-nosql-databases-handle-array-modifications">How NoSQL
+Databases Handle Array Modifications</h1>
+<p>Document-oriented NoSQL databases optimize array modifications by
+avoiding full-document rewrites on disk, preventing performance
+bottlenecks and high input/output operations. Rather than re-serializing
+and writing an entire document file whenever an element is added,
+updated, or removed, modern document stores rely on specialized storage
+engines. These engines utilize techniques such as in-place updates with
+allocated padding, write-ahead delta logging, storage-level paging, and
+internal tree representations to isolate and persist only the modified
+array segments.</p>
+<h3 id="in-memory-page-mutation-and-dirty-page-tracking">In-Memory Page
+Mutation and Dirty Page Tracking</h3>
+<p>Modern NoSQL platforms, such as MongoDB using the WiredTiger engine,
+do not write directly to document files on disk during a write
+operation. Instead, the document is loaded into an in-memory cache as an
+uncompressed representation.</p>
+<p>When an array modification occurs (such as an append, pop, or index
+update):</p>
+<ul>
+<li>The engine applies the change directly to the specific memory
+addresses associated with that array within the cached page.</li>
+<li>The memory page containing the document is marked as "dirty."</li>
+<li>The modified document remains in memory until a checkpoint process
+compresses and writes the dirty page back to disk in bulk.</li>
+</ul>
+<p>Because updates happen in memory first, high-frequency array
+manipulations run with low latency without triggering immediate disk
+input/output.</p>
+<h3 id="write-ahead-logging-and-delta-commits">Write-Ahead Logging and
+Delta Commits</h3>
+<p>To ensure durability without immediate full-document writes,
+databases use a Write-Ahead Log (WAL) or transaction journal. When an
+array is altered, the database writes a compact delta operation (a
+change record describing the modification, such as adding an element to
+a specific index) to the append-only log file on disk.</p>
+<p>Because append operations to a sequential log are fast, the database
+guarantees durability immediately. If the server crashes before the
+modified document in memory is flushed to its primary data file, the
+database replays the delta logs during recovery to reconstruct the
+array's state.</p>
+<h3 id="page-based-block-storage-and-partial-page-rewrites">Page-Based
+Block Storage and Partial Page Rewrites</h3>
+<p>Document databases store records inside fixed-size disk blocks or
+pages (commonly 4KB to 32KB). A document file on disk is an aggregate of
+these physical pages, not a single monolithic file per document.</p>
+<p>When the database flushes a modified array to the persistent storage
+layer:</p>
+<ol type="1">
+<li>The engine identifies the specific page containing the
+document.</li>
+<li>Only that individual page—or a newly allocated copy of it in
+copy-on-write architectures—is written to disk.</li>
+<li>The rest of the document collection files and surrounding data pages
+remain completely untouched.</li>
+</ol>
+<h3 id="document-growth-and-padding-allocation">Document Growth and
+Padding Allocation</h3>
+<p>When an array grows, it increases the total byte size of the
+document. Storage engines manage this growth using allocation
+strategies:</p>
+<ul>
+<li><strong>Pre-allocated Padding:</strong> Some engines allocate
+slightly more byte capacity than the document currently requires. If an
+array expands within this pre-allocated buffer, the update is performed
+strictly in-place on the existing storage block without shifting
+neighboring records.</li>
+<li><strong>Relocation on Overflow:</strong> If an array expands beyond
+the page's free space or the record's allocated boundary, the engine
+moves only that specific document to a new location with sufficient
+contiguous space, reclaiming the old space for future writes.</li>
+</ul>
+<h3 id="structural-decomposition-and-nested-trees">Structural
+Decomposition and Nested Trees</h3>
+<p>For documents with very large arrays, advanced storage formats
+decompose the document into an internal hierarchy, such as a B-tree or
+nested key-value pairs at the storage layer.</p>
+<p>In these systems, array elements are stored across distinct leaf
+nodes rather than as a single contiguous byte array. Adding or deleting
+an element simply requires inserting, deleting, or rebalancing a
+specific leaf node within the storage engine’s internal tree structure,
+leaving the remaining elements and the root document structure
+unmodified.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/how-no-sql-databases-handle-array-modifications';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

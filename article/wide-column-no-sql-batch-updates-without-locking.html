@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wide-Column NoSQL Batch Updates Without Locking - nosql</title>
+    <meta name="description" content="Wide-column NoSQL databases, such as Apache Cassandra and ScyllaDB, handle long-running batch updates without traditional lock contention by relying on append-only architectures, Log-Structured Merge-trees (LSM-trees), and timestamp-based concurrency mode">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/wide-column-no-sql-batch-updates-without-locking">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Wide-Column NoSQL Batch Updates Without Locking - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/wide-column-no-sql-batch-updates-without-locking" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Wide-column NoSQL databases, such as Apache Cassandra and ScyllaDB, handle long-running batch updates without traditional lock contention by relying on append-only architectures, Log-Structured Merge-trees (LSM-trees), and timestamp-based concurrency mode" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="wide-column-nosql-batch-updates-without-locking">Wide-Column
+NoSQL Batch Updates Without Locking</h1>
+<p>Wide-column NoSQL databases, such as Apache Cassandra and ScyllaDB,
+handle long-running batch updates without traditional lock contention by
+relying on append-only architectures, Log-Structured Merge-trees
+(LSM-trees), and timestamp-based concurrency models. Instead of locking
+rows or tables to overwrite existing data in place, these systems treat
+updates as new, immutable writes. This architectural choice decouples
+read and write operations, allowing sustained, high-throughput batch
+modifications without causing database bottlenecks or deadlocks.</p>
+<h3
+id="log-structured-merge-trees-and-append-only-writes">Log-Structured
+Merge-Trees and Append-Only Writes</h3>
+<p>Traditional relational databases update data in place on disk,
+requiring row- or table-level locks to prevent concurrent processes from
+reading or writing partially modified states. Wide-column stores avoid
+in-place mutations altogether by using an append-only write path powered
+by LSM-trees.</p>
+<p>When a batch update arrives at a node:</p>
+<ol type="1">
+<li>It is sequentially appended to an on-disk write-ahead log (such as
+the CommitLog) for crash recovery. Sequential disk access requires no
+index locking.</li>
+<li>It is concurrently written to an in-memory sorted structure known as
+a MemTable.</li>
+</ol>
+<p>Because writes only append data to memory and sequential logs, the
+database does not need to verify or lock the physical location of
+existing data. The write operation completes as soon as it resides in
+the MemTable and the log, minimizing transaction duration from seconds
+to microseconds.</p>
+<h3 id="timestamp-ordering-and-last-write-wins-lww">Timestamp Ordering
+and Last-Write-Wins (LWW)</h3>
+<p>Rather than using pessimistic locking to manage concurrent updates to
+the same record, wide-column engines use cell-level timestamps to
+implement optimistic concurrency resolution, commonly known as
+Last-Write-Wins (LWW).</p>
+<p>Each column updated within a batch is stamped with a
+microsecond-precision coordinator or client timestamp. If a long-running
+batch modifies a column that is simultaneously targeted by another
+process, both updates are written without blocking. The database defers
+conflict resolution until read time or background maintenance: whichever
+write has the latest timestamp is considered the authoritative
+version.</p>
+<h3 id="asynchronous-compaction">Asynchronous Compaction</h3>
+<p>The physical merging of multiple updates to the same cell occurs
+asynchronously during a process called compaction:</p>
+<ul>
+<li>When MemTables fill up, they are flushed to disk as immutable
+SSTables (Sorted String Tables).</li>
+<li>Over time, background worker threads read multiple SSTables,
+reconcile duplicate keys using their timestamps, discard older versions
+or tombstones (deleted records), and write the consolidated result to a
+new SSTable.</li>
+<li>Because this process runs completely in the background on immutable
+files, it operates without halting or locking the active read and write
+paths.</li>
+</ul>
+<h3 id="partitioning-and-batch-distribution">Partitioning and Batch
+Distribution</h3>
+<p>Wide-column databases distribute data horizontally across nodes using
+consistent hashing based on a partition key. In traditional databases, a
+batch spanning millions of rows can hold an active transaction lock open
+across a single server. In contrast, wide-column architectures handle
+batch processing through distributed partitioning:</p>
+<ul>
+<li><strong>Token-Aware Routing:</strong> Client drivers calculate the
+partition key hashes of batch items and distribute them directly to the
+appropriate replica nodes, preventing a single coordinator node from
+bottlenecking.</li>
+<li><strong>Independent Atomic Partitions:</strong> Long-running batches
+are typically decomposed into partition-level operations. Since
+isolation boundaries exist at the partition level, updates to different
+partitions run in parallel with zero contention.</li>
+<li><strong>Atomic Batching via Distributed Logs:</strong> When atomic
+guarantees across multiple rows are required (such as logged batches),
+coordinators write batch metadata to a dedicated distributed batch-log
+rather than holding live locks on the affected rows. If the coordinator
+fails mid-operation, other nodes replay the log to guarantee eventual
+consistency without ever having blocked other client transactions.</li>
+</ul></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/wide-column-no-sql-batch-updates-without-locking';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

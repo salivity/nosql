@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Snapshot Isolation in NoSQL Cluster Backups - nosql</title>
+    <meta name="description" content="This article explores the mechanisms used to achieve snapshot isolation during backup operations across distributed NoSQL clusters. Ensuring a consistent, point-in-time backup without taking the cluster offline requires coordinating across multiple distri">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/snapshot-isolation-in-no-sql-cluster-backups">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Snapshot Isolation in NoSQL Cluster Backups - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/snapshot-isolation-in-no-sql-cluster-backups" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="This article explores the mechanisms used to achieve snapshot isolation during backup operations across distributed NoSQL clusters. Ensuring a consistent, point-in-time backup without taking the cluster offline requires coordinating across multiple distri" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="snapshot-isolation-in-nosql-cluster-backups">Snapshot Isolation
+in NoSQL Cluster Backups</h1>
+<p>This article explores the mechanisms used to achieve snapshot
+isolation during backup operations across distributed NoSQL clusters.
+Ensuring a consistent, point-in-time backup without taking the cluster
+offline requires coordinating across multiple distributed nodes that
+process continuous write operations. The primary mechanisms that
+guarantee this isolation include multi-version concurrency control,
+distributed logical clocks, immutable storage engines, and write-ahead
+log (WAL) replay techniques.</p>
+<h3 id="multi-version-concurrency-control-mvcc">Multi-Version
+Concurrency Control (MVCC)</h3>
+<p>Multi-Version Concurrency Control is the foundational mechanism for
+snapshot isolation in many distributed databases. When an update occurs
+in an MVCC-enabled system, the database does not overwrite the existing
+data. Instead, it writes a new version of the record tagged with a
+specific transaction timestamp or version identifier.</p>
+<p>During a backup operation, the backup process is assigned a read
+timestamp representing the exact point in time of the snapshot. As the
+backup reads data across nodes, it filters out any records or updates
+bearing a timestamp later than the assigned snapshot timestamp. This
+allows read and write operations to proceed normally without locking,
+while the backup process reads only the data versions that existed at
+that precise moment.</p>
+<h3 id="distributed-clocks-and-coordinated-timestamps">Distributed
+Clocks and Coordinated Timestamps</h3>
+<p>Achieving snapshot isolation across independent nodes requires a
+unified sense of time to establish a valid cut-off point. Because
+physical clocks drift across servers, NoSQL clusters use specialized
+clock mechanisms to order events:</p>
+<ul>
+<li><strong>Hybrid Logical Clocks (HLCs):</strong> Combine physical time
+with logical counters to ensure causal ordering across nodes without
+requiring specialized hardware.</li>
+<li><strong>TrueTime / Atomic Clocks:</strong> Utilize GPS and atomic
+clocks to bound clock uncertainty, enabling globally consistent
+transaction timestamps across regions.</li>
+<li><strong>Centralized Timestamp Oracles:</strong> Assign monotonically
+increasing sequence numbers from a single coordination point for smaller
+or lower-latency topologies.</li>
+</ul>
+<p>By establishing an unambiguous global timestamp, the cluster ensures
+that all nodes snapshot the exact same causal state, preventing
+anomalies such as recording a child record without its associated
+parent.</p>
+<h3 id="storage-level-immutability-and-copy-on-write">Storage-Level
+Immutability and Copy-on-Write</h3>
+<p>Most write-optimized NoSQL systems (such as Cassandra, ScyllaDB, and
+RocksDB-based systems) use Log-Structured Merge-trees (LSM-trees). In an
+LSM architecture, data is written sequentially to memory and then
+flushed to disk as immutable data files (SSTables).</p>
+<p>Because these files never change once written, taking a snapshot does
+not require copying active files immediately. Instead, the cluster
+executes a coordinated filesystem hard-link or metadata freeze:</p>
+<ol type="1">
+<li>Active memory tables (memtables) are flushed to disk.</li>
+<li>The system creates hard links to existing SSTables or freezes the
+current manifest file containing references to valid files.</li>
+<li>Compaction routines are instructed not to delete older SSTable
+versions that are currently locked by the snapshot process.</li>
+</ol>
+<p>This approach creates an instantaneous, zero-copy local snapshot on
+each node with negligible performance overhead.</p>
+<h3 id="coordinated-checkpointing-and-distributed-snapshots">Coordinated
+Checkpointing and Distributed Snapshots</h3>
+<p>To synchronize state across independent partitions, clusters apply
+variants of the Chandy-Lamport distributed snapshot algorithm. A
+coordinator node initiates a snapshot marker that propagates across all
+shards along communication channels.</p>
+<p>When a node receives the marker:</p>
+<ol type="1">
+<li>It records its local state immediately if it has not already done
+so.</li>
+<li>It logs all incoming messages from adjacent nodes until it receives
+the marker along each communication link.</li>
+<li>It packages the state and in-flight operations to form a globally
+consistent state.</li>
+</ol>
+<p>This ensures that transactions in transit during the backup process
+are accurately captured, eliminating partial state captures.</p>
+<h3 id="write-ahead-log-wal-and-oplog-replay">Write-Ahead Log (WAL) and
+Oplog Replay</h3>
+<p>In environments where distributed point-in-time coordination across
+nodes is difficult to synchronize precisely at the storage layer,
+systems use "fuzzy" snapshots coupled with transaction log
+replaying.</p>
+<p>The backup coordinator starts recording changes from the write-ahead
+log, transaction log, or operations log (such as MongoDB's oplog). A
+non-isolated data copy of the underlying storage is then captured while
+the cluster accepts writes. Once the data files are copied, the backup
+process records the final log position.</p>
+<p>To restore a state with snapshot isolation:</p>
+<ol type="1">
+<li>The baseline data copy is restored.</li>
+<li>The log stream is applied forward from the start of the backup to a
+specific target checkpoint.</li>
+<li>Any partial, uncommitted, or out-of-order writes are rolled back to
+align with the snapshot boundary.</li>
+</ol></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/snapshot-isolation-in-no-sql-cluster-backups';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

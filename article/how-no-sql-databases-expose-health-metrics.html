@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How NoSQL Databases Expose Health Metrics - nosql</title>
+    <meta name="description" content="Modern NoSQL databases provide comprehensive operational visibility by surfacing vital health, resource utilization, and throughput data through standardized telemetry interfaces. This article explores the primary mechanisms NoSQL engines—such as MongoDB,">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/how-no-sql-databases-expose-health-metrics">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How NoSQL Databases Expose Health Metrics - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/how-no-sql-databases-expose-health-metrics" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Modern NoSQL databases provide comprehensive operational visibility by surfacing vital health, resource utilization, and throughput data through standardized telemetry interfaces. This article explores the primary mechanisms NoSQL engines—such as MongoDB," />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-nosql-databases-expose-health-metrics">How NoSQL Databases
+Expose Health Metrics</h1>
+<p>Modern NoSQL databases provide comprehensive operational visibility
+by surfacing vital health, resource utilization, and throughput data
+through standardized telemetry interfaces. This article explores the
+primary mechanisms NoSQL engines—such as MongoDB, Apache Cassandra,
+Redis, and Amazon DynamoDB—use to expose metrics, explaining the
+architectural paths through which observability tools ingest this data
+for alerting, monitoring, and automated remediation.</p>
+<h2 id="http-endpoints-and-prometheus-exporters">HTTP Endpoints and
+Prometheus Exporters</h2>
+<p>Many modern NoSQL engines expose health metrics over HTTP via
+specialized endpoints formatted according to OpenMetrics or Prometheus
+standards. In systems where a native HTTP scraping endpoint is not built
+directly into the database core, external daemon processes known as
+exporters (such as <code>redis_exporter</code> or
+<code>mongodb_exporter</code>) bridge the gap. These exporters
+continuously query the database engine via internal drivers and
+translate internal runtime statistics into Prometheus-compatible
+plaintext formats. Observability agents, such as Prometheus or the
+OpenTelemetry Collector, scrape these HTTP endpoints at fixed intervals
+to gather metrics regarding request counts, memory consumption, and
+active connections.</p>
+<h2 id="native-administrative-commands-and-apis">Native Administrative
+Commands and APIs</h2>
+<p>Most NoSQL databases maintain internal statistical tables and system
+state data that can be queried using built-in administrative commands.
+For instance:</p>
+<ul>
+<li><strong>Redis</strong> uses the <code>INFO</code> command to return
+immediate runtime statistics across memory usage, connected clients,
+persistence states, and CPU consumption.</li>
+<li><strong>MongoDB</strong> provides diagnostic commands like
+<code>serverStatus</code>, <code>dbStats</code>, and
+<code>replSetGetStatus</code> to output detailed JSON documents covering
+lock contention, query execution times, wiredTiger storage engine cache
+statistics, and replication health.</li>
+<li><strong>Couchbase</strong> surfaces full REST-based administrative
+endpoints (<code>/pools/default</code>) that expose real-time node and
+bucket performance statistics directly to authorized callers.</li>
+</ul>
+<p>Observability agents (such as Datadog Agent, Telegraf, or custom
+monitoring scripts) run these commands through authenticated
+connections, parse the returned data structures, and forward the metrics
+to centralized monitoring platforms.</p>
+<h2 id="java-management-extensions-jmx">Java Management Extensions
+(JMX)</h2>
+<p>NoSQL databases built on the Java Virtual Machine (JVM)—notably
+Apache Cassandra and Apache HBase—rely heavily on Java Management
+Extensions (JMX) to expose deep runtime telemetry. Cassandra publishes
+Managed Beans (MBeans) for internal subsystems, exposing operational
+data such as:</p>
+<ul>
+<li>Read and write latencies per keyspace and table</li>
+<li>Compaction throughput and pending tasks</li>
+<li>Garbage collection pause durations and JVM heap allocations</li>
+<li>Dropped message counters across internal thread pools</li>
+</ul>
+<p>Observability tools capture JMX metrics either through embedded JVM
+agents (like Prometheus's <code>jmx_exporter</code>), local utilities
+(such as Cassandra's CLI-based <code>nodetool</code>), or external
+daemons running remote RMI queries.</p>
+<h2 id="cloud-managed-apis-and-telemetry-pipelines">Cloud-Managed APIs
+and Telemetry Pipelines</h2>
+<p>Fully managed NoSQL services—such as Amazon DynamoDB, Google Cloud
+Firestore, and Azure Cosmos DB—abstract the underlying host
+infrastructure and expose health metrics through cloud-native telemetry
+fabrics. Rather than providing host-level metrics, these services
+automatically emit operational telemetry directly into services like
+Amazon CloudWatch, Google Cloud Monitoring, or Azure Monitor.</p>
+<p>Exposed metrics focus on service-level indicators (SLIs), including
+consumed read/write capacity units, throttling events, replication lag
+across global tables, and end-to-end user latencies. Third-party
+observability tools integrate with these databases via cloud provider
+telemetry APIs or streaming services (such as AWS CloudWatch Metric
+Streams) to ingest the metrics into unified dashboards.</p>
+<h2 id="diagnostic-logs-and-trace-emission">Diagnostic Logs and Trace
+Emission</h2>
+<p>Beyond metric polling and push mechanisms, NoSQL databases surface
+health indicators through structured event logs and distributed tracing
+hooks. Slow query logs, cluster topology change notifications, and
+consensus heartbeat failures (such as Raft or Paxos election events) are
+written to structured <code>stdout</code> or log files. Observability
+agents ingest these logs in real time, parsing key-value pairs or JSON
+strings to transform log events into actionable health metrics, error
+rates, and security telemetry.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/how-no-sql-databases-expose-health-metrics';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How NoSQL Engines Reduce Memory Fragmentation - nosql</title>
+    <meta name="description" content="NoSQL databases process high volumes of dynamic, concurrent read and write operations that frequently allocate and deallocate variable-sized data blocks. Without specialized memory management, this behavior causes severe memory fragmentation, leading to w">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/how-no-sql-engines-reduce-memory-fragmentation">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How NoSQL Engines Reduce Memory Fragmentation - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/how-no-sql-engines-reduce-memory-fragmentation" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="NoSQL databases process high volumes of dynamic, concurrent read and write operations that frequently allocate and deallocate variable-sized data blocks. Without specialized memory management, this behavior causes severe memory fragmentation, leading to w" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-nosql-engines-reduce-memory-fragmentation">How NoSQL Engines
+Reduce Memory Fragmentation</h1>
+<p>NoSQL databases process high volumes of dynamic, concurrent read and
+write operations that frequently allocate and deallocate variable-sized
+data blocks. Without specialized memory management, this behavior causes
+severe memory fragmentation, leading to wasted RAM, degraded cache
+locality, and unpredictable latency spikes. To mitigate these risks,
+NoSQL engines employ modern alternative memory allocators, custom slab
+and arena allocation schemes, active background defragmentation, and
+off-heap memory architectures. This article examines the core mechanisms
+NoSQL engines rely on to control memory fragmentation and maintain
+predictable throughput.</p>
+<h3
+id="replacing-default-allocators-with-jemalloc-and-tcmalloc">Replacing
+Default Allocators with jemalloc and TCMalloc</h3>
+<p>Standard system allocators, such as the default GNU C Library
+<code>malloc</code>, are designed for general-purpose workloads and
+often suffer from severe external fragmentation under concurrent,
+multi-threaded workloads. Most NoSQL systems (such as Redis, Aerospike,
+and MongoDB's WiredTiger engine) bypass the default glibc allocator in
+favor of <code>jemalloc</code> or <code>TCMalloc</code> (Thread-Caching
+Malloc).</p>
+<p>These advanced allocators reduce fragmentation through two primary
+techniques:</p>
+<ul>
+<li><strong>Fine-Grained Size Classes:</strong> Instead of allocating
+arbitrary byte sizes directly from the OS, <code>jemalloc</code> and
+<code>TCMalloc</code> categorize requests into dozens of predetermined
+size classes (bins). By rounding requests up to standard sizes, the
+allocator reuses free slots consistently, virtually eliminating small
+gaps between allocated blocks.</li>
+<li><strong>Thread-Specific Caching:</strong> Each thread maintains an
+independent cache for small allocations. This isolates thread memory
+operations, reduces global lock contention, and ensures that memory
+freed by a thread is quickly reused for subsequent operations of the
+same size before dirtying new operating system pages.</li>
+</ul>
+<h3 id="slab-allocation-for-fixed-size-data-structures">Slab Allocation
+for Fixed-Size Data Structures</h3>
+<p>For workloads characterized by high churn of uniform objects, NoSQL
+engines implement slab allocation. First popularized in kernel
+architectures and caching engines like Memcached, slab allocation groups
+memory into large contiguous blocks called "slabs."</p>
+<p>Each slab is sliced into equal-sized slots tailored to a specific
+data size class. When an engine inserts a new record:</p>
+<ol type="1">
+<li>It identifies the slab class that best fits the record's
+payload.</li>
+<li>It assigns an open slot within that specific slab.</li>
+<li>Upon deletion, the slot is marked as free within its original slab,
+ready to be immediately overwritten.</li>
+</ol>
+<p>Because slots within a slab never change size, external fragmentation
+is structurally eliminated. Engines balance this against internal
+fragmentation (the unused padding within a slot) by maintaining finely
+spaced slab classes.</p>
+<h3 id="arena-and-region-based-allocation">Arena and Region-Based
+Allocation</h3>
+<p>Log-Structured Merge-tree (LSM-tree) based engines, such as RocksDB
+and Apache Cassandra, heavily utilize arena-based (or region-based)
+allocators to manage write buffers (MemTables).</p>
+<p>Instead of allocating and freeing individual key-value pairs
+independently:</p>
+<ul>
+<li>The engine allocates large, contiguous memory arenas (typically
+several megabytes in size).</li>
+<li>Writes append sequentially into the arena buffer, maximizing memory
+density and CPU cache efficiency.</li>
+<li>When the MemTable is flushed to disk as an immutable SSTable, the
+entire arena is reclaimed in a single operation.</li>
+</ul>
+<p>Freeing entire memory regions simultaneously prevents the formation
+of isolated, unallocated holes that typically occur when records are
+deleted sporadically.</p>
+<h3 id="active-background-defragmentation">Active Background
+Defragmentation</h3>
+<p>Even with optimized allocation strategies, long-running in-memory
+databases can develop fragmentation over time as keys expire or mutate.
+Systems like Redis feature built-in active defragmentation capabilities
+that operate at runtime without requiring restarts.</p>
+<p>Active defragmentation works by:</p>
+<ol type="1">
+<li><strong>Introspecting Memory Pages:</strong> The engine queries
+allocator APIs (such as <code>jemalloc</code>'s control interface) to
+detect physical memory pages with high ratios of unused space to
+allocated data.</li>
+<li><strong>Copy-and-Reallocate:</strong> The engine scans keys residing
+in fragmented pages, allocates contiguous new copies in well-utilized
+pages, updates pointer references, and releases the original
+memory.</li>
+<li><strong>Adaptive Throttling:</strong> The defragmentation routine
+monitors CPU overhead, scaling its execution up during idle periods and
+throttling down during high-traffic spikes to avoid impacting query
+latency.</li>
+</ol>
+<h3 id="off-heap-memory-and-zero-copy-io">Off-Heap Memory and Zero-Copy
+I/O</h3>
+<p>For NoSQL systems running on managed runtimes like the Java Virtual
+Machine (such as Apache Cassandra, Apache HBase, and Hazelcast), garbage
+collection (GC) fragmentation poses a major operational hazard. JVM heap
+fragmentation triggers expensive Stop-The-World compaction events.</p>
+<p>To circumvent this, these engines allocate long-lived structures—such
+as read caches, bloom filters, and buffer pools—directly off-heap using
+APIs like Java’s <code>Unsafe</code> or
+<code>ByteBuffer.allocateDirect()</code>. Bypassing the JVM heap allows
+the engine to handle memory allocations natively via direct C-level
+calls or custom chunk-based pooling mechanisms, ensuring that long-lived
+database caches do not fragment the application runtime.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/how-no-sql-engines-reduce-memory-fragmentation';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

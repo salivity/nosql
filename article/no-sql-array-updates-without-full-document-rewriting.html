@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NoSQL Array Updates Without Full Document Rewriting - nosql</title>
+    <meta name="description" content="Modern document-oriented NoSQL databases avoid rewriting entire documents during array modifications by combining granular update operators, low-level delta logging, and adaptive storage engine designs. Instead of replacing the full record on disk, these">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/no-sql-array-updates-without-full-document-rewriting">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="NoSQL Array Updates Without Full Document Rewriting - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/no-sql-array-updates-without-full-document-rewriting" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Modern document-oriented NoSQL databases avoid rewriting entire documents during array modifications by combining granular update operators, low-level delta logging, and adaptive storage engine designs. Instead of replacing the full record on disk, these" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="nosql-array-updates-without-full-document-rewriting">NoSQL Array
+Updates Without Full Document Rewriting</h1>
+<p>Modern document-oriented NoSQL databases avoid rewriting entire
+documents during array modifications by combining granular update
+operators, low-level delta logging, and adaptive storage engine designs.
+Instead of replacing the full record on disk, these databases use
+specialized mechanisms—such as in-place byte manipulation, internal
+memory padding, and Write-Ahead Logging (WAL) of delta changes—to
+process array appends, removals, and element modifications with minimal
+I/O overhead.</p>
+<h3 id="granular-path-based-operators">Granular Path-Based
+Operators</h3>
+<p>Document databases like MongoDB rely on specialized operators (such
+as <code>$push</code>, <code>$pull</code>, and <code>$set</code> on
+indexed paths) rather than naive read-modify-write cycles from the
+application client. When an update request is received:</p>
+<ul>
+<li>The database parses the target field path (for example,
+<code>tags.2</code> or <code>items.$[]</code>).</li>
+<li>It executes the change exclusively on the designated array offset in
+memory.</li>
+<li>The update is serialized over the network and processed internally
+as an operational delta rather than a full document payload,
+significantly reducing network and CPU deserialization overhead.</li>
+</ul>
+<h3 id="storage-engine-delta-logging-and-the-wal">Storage Engine Delta
+Logging and the WAL</h3>
+<p>At the durability layer, storage engines (such as WiredTiger in
+MongoDB or RocksDB in distributed variants) record updates via
+transaction journals or Write-Ahead Logs (WAL).</p>
+<p>When an array grows or shrinks, the engine does not rewrite the
+complete BSON or JSON document to the journal. Instead, it writes a
+compact log record that captures only the specific array mutation.
+During periodic checkpoints, these changes are reconciled in memory and
+flushed to disk blocks, ensuring ACID guarantees without synchronous,
+full-document disk flushes.</p>
+<h3 id="in-place-updates-vs-block-reallocation">In-Place Updates vs.
+Block Reallocation</h3>
+<p>How an array update is written directly to disk depends on the
+storage architecture:</p>
+<ol type="1">
+<li><strong>In-Place Updates with Padding:</strong> If an array element
+is modified without increasing its byte size (or if the document has
+pre-allocated padding space), the storage engine updates the bytes
+directly inside the existing disk page.</li>
+<li><strong>Page-Level Buffering:</strong> Storage engines organize data
+into fixed-size memory pages (often 4KB to 32KB). When an array expands,
+the document expands within that allocated page. As long as the page has
+sufficient contiguous free space, the engine shifts neighboring bytes
+inside the page cache to fit the new array elements, avoiding a
+cross-disk rewrite.</li>
+<li><strong>Log-Structured Merge (LSM) Trees:</strong> In LSM-based
+document stores, updates do not modify existing data blocks at all.
+Array mutations are written sequentially as new entries (tombstones or
+delta fragments) at the head of the log. Background compaction later
+merges these fragmented array states into a single unified
+document.</li>
+</ol>
+<h3 id="handling-unbounded-array-growth">Handling Unbounded Array
+Growth</h3>
+<p>When dynamic arrays expand beyond the capacity of an existing storage
+block or page:</p>
+<ul>
+<li><strong>Document Relocation:</strong> If a document exceeds its
+current page bounds, the storage engine relocates the document to a
+larger continuous space. To prevent costly index updates across the
+entire database, the engine often leaves a lightweight pointer
+(forwarding address) at the original record ID, maintaining existing
+index pointers.</li>
+<li><strong>Out-of-Line Storage:</strong> For massive arrays that
+approach maximum document size thresholds (such as MongoDB's 16MB
+limit), architectures generally offload data into separate collection
+links or bucket patterns, as excessive continuous relocation causes disk
+fragmentation and CPU throttling.</li>
+</ul></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/no-sql-array-updates-without-full-document-rewriting';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Vector Clocks Resolve Conflicts in NoSQL - nosql</title>
+    <meta name="description" content="Vector clocks are distributed metadata mechanisms used by decentralized NoSQL databases to track causality and detect concurrent update conflicts across multiple nodes. In distributed environments where nodes lack a shared global physical clock, vector cl">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/how-vector-clocks-resolve-conflicts-in-no-sql">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Vector Clocks Resolve Conflicts in NoSQL - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/how-vector-clocks-resolve-conflicts-in-no-sql" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Vector clocks are distributed metadata mechanisms used by decentralized NoSQL databases to track causality and detect concurrent update conflicts across multiple nodes. In distributed environments where nodes lack a shared global physical clock, vector cl" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-vector-clocks-resolve-conflicts-in-nosql">How Vector Clocks
+Resolve Conflicts in NoSQL</h1>
+<p>Vector clocks are distributed metadata mechanisms used by
+decentralized NoSQL databases to track causality and detect concurrent
+update conflicts across multiple nodes. In distributed environments
+where nodes lack a shared global physical clock, vector clocks provide a
+reliable way to determine whether one write operation happened before
+another, succeeded it, or occurred concurrently. This article examines
+the structure of vector clocks, how they capture causal relationships,
+and the exact process NoSQL systems use to identify and resolve
+conflicting writes.</p>
+<h3 id="the-challenge-of-distributed-writes">The Challenge of
+Distributed Writes</h3>
+<p>In distributed, eventually consistent NoSQL systems—such as Riak or
+Amazon Dynamo-style databases—data is replicated across multiple
+independent nodes to ensure high availability and partition tolerance.
+Because physical system clocks on different servers experience drift and
+network synchronization latency, using physical timestamps to order
+events leads to data loss (the "Last-Write-Wins" hazard). If two clients
+update the same record on different replica nodes at approximately the
+same time, the system needs a logical mechanism to determine the
+sequence of events without relying on wall-clock time.</p>
+<h3 id="structure-of-a-vector-clock">Structure of a Vector Clock</h3>
+<p>A vector clock is an array or key-value map of logical clock counters
+maintained for every data object. Each entry represents a specific node
+(or actor) and an integer value representing the version count of
+updates witnessed by that node:</p>
+<p><span class="math display">\[VC = \{ Node_A: v_1, Node_B: v_2, \dots,
+Node_N: v_n \}\]</span></p>
+<p>When a client reads an object, it receives both the data payload and
+its current vector clock. When the client writes an update, it sends the
+vector clock back to the coordinating node, which increments its own
+counter before replicating the object across the cluster.</p>
+<h3 id="determining-causality">Determining Causality</h3>
+<p>Vector clocks determine causal precedence by comparing the state of
+two vectors, <span class="math inline">\(V_1\)</span> and <span
+class="math inline">\(V_2\)</span>, for the same data key:</p>
+<ol type="1">
+<li><strong>Direct Precedence (<span class="math inline">\(V_1\)</span>
+happened before <span class="math inline">\(V_2\)</span>):</strong> If
+every node's counter in <span class="math inline">\(V_1\)</span> is less
+than or equal to the corresponding counter in <span
+class="math inline">\(V_2\)</span>, and at least one counter in <span
+class="math inline">\(V_2\)</span> is strictly greater (<span
+class="math inline">\(V_1 \le V_2\)</span>), then <span
+class="math inline">\(V_2\)</span> is a causal descendant of <span
+class="math inline">\(V_1\)</span>. The database can safely overwrite
+the <span class="math inline">\(V_1\)</span> data with <span
+class="math inline">\(V_2\)</span>.</li>
+<li><strong>Identical Versions (<span class="math inline">\(V_1 =
+V_2\)</span>):</strong> The data represents the exact same state, and no
+update is required.</li>
+<li><strong>Concurrent Writes (Conflict):</strong> If <span
+class="math inline">\(V_1\)</span> has higher counter values for some
+nodes, while <span class="math inline">\(V_2\)</span> has higher counter
+values for others, neither vector dominates. This indicates that two
+independent writes occurred without knowledge of one another.</li>
+</ol>
+<h3 id="conflict-resolution-process">Conflict Resolution Process</h3>
+<p>When a read or replication event identifies non-dominating,
+concurrent vector clocks, the system triggers conflict resolution:</p>
+<ul>
+<li><strong>Sibling Creation:</strong> Instead of discarding one write,
+the database preserves both versions alongside their respective vector
+clocks as "siblings."</li>
+<li><strong>Client-Side Resolution:</strong> On the next read request,
+the database returns all sibling values and their vector clocks to the
+client. The client application applies domain-specific business logic
+(such as merging items in a shopping cart) to reconcile the values into
+a single consolidated payload.</li>
+<li><strong>Clock Merging:</strong> Once resolved, the client writes the
+reconciled payload back to the database. The coordinating node generates
+a new vector clock that takes the maximum value of each node entry from
+all sibling clocks, plus an increment for the coordinating node. This
+new vector dominates all previous branches, effectively collapsing the
+siblings back into a single, unified lineage.</li>
+</ul>
+<h3 id="trade-offs-vector-clock-growth">Trade-offs: Vector Clock
+Growth</h3>
+<p>In systems with frequent writes or churn in participating nodes,
+vector clocks can grow indefinitely, consuming excessive storage and
+network bandwidth. To mitigate this, NoSQL systems implement pruning
+algorithms based on thresholds of size or age. Pruning removes old node
+entries, transforming the vector clock into a bounded data structure,
+though overly aggressive truncation introduces a small risk of
+misidentifying causal updates as concurrent writes.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/how-vector-clocks-resolve-conflicts-in-no-sql';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

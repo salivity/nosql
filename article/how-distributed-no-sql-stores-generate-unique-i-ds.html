@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Distributed NoSQL Stores Generate Unique IDs - nosql</title>
+    <meta name="description" content="Distributed document NoSQL databases must generate globally unique primary keys across vast clusters without relying on a centralized coordination service. Relying on a central authority or auto-incrementing database lock creates performance bottlenecks,">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/how-distributed-no-sql-stores-generate-unique-i-ds">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How Distributed NoSQL Stores Generate Unique IDs - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/how-distributed-no-sql-stores-generate-unique-i-ds" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Distributed document NoSQL databases must generate globally unique primary keys across vast clusters without relying on a centralized coordination service. Relying on a central authority or auto-incrementing database lock creates performance bottlenecks," />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-distributed-nosql-stores-generate-unique-ids">How
+Distributed NoSQL Stores Generate Unique IDs</h1>
+<p>Distributed document NoSQL databases must generate globally unique
+primary keys across vast clusters without relying on a centralized
+coordination service. Relying on a central authority or
+auto-incrementing database lock creates performance bottlenecks,
+introduces network latency, and establishes a single point of failure.
+To circumvent this, NoSQL systems—such as MongoDB and CouchDB—utilize
+decentralized identification strategies that divide ID creation into
+independent, orthogonal dimensions. By combining physical factors like
+timestamps, node identifiers, process markers, and local counters, or by
+leveraging massive entropy, these databases produce deterministic or
+statistically collision-free identifiers in pure isolation.</p>
+<h3 id="the-problem-with-centralized-identification">The Problem with
+Centralized Identification</h3>
+<p>Traditional relational databases historically rely on centralized
+auto-incrementing integer sequences. In a distributed architecture with
+multiple master nodes, shards, or autonomous clients:</p>
+<ul>
+<li><strong>Network Latency:</strong> Every ID assignment requires a
+synchronous network round-trip to a central sequencer or consensus
+group.</li>
+<li><strong>Single Point of Failure (SPOF):</strong> If the central
+coordinator becomes unreachable, all write operations across the entire
+cluster stall.</li>
+<li><strong>Scalability Bottlenecks:</strong> High-throughput write
+workloads saturate the coordination node's throughput capacity.</li>
+</ul>
+<p>To solve this, document stores delegate the ID generation task
+completely to the distributed nodes or the client drivers
+themselves.</p>
+<h3 id="composite-structured-identifiers-eg-mongodb-objectid">Composite
+Structured Identifiers (e.g., MongoDB ObjectId)</h3>
+<p>One of the most prevalent approaches is the structured composite
+identifier, pioneered by systems like MongoDB via its 12-byte BSON
+<code>ObjectId</code>. Instead of generating a random number, the system
+constructs an ID using a fixed bitwise layout that separates the logical
+guarantees of uniqueness:</p>
+<ol type="1">
+<li><strong>Unix Timestamp (4 bytes):</strong> Measures seconds since
+the Unix epoch. This provides natural time-sorting, limits the scope of
+potential collisions to within a single second, and allows the ID to
+double as a creation timestamp.</li>
+<li><strong>Node/Machine Identifier (3 or 5 bytes depending on
+spec):</strong> A cryptographic hash of the host machine’s identity
+(such as a MAC address or unique host configuration), or a unique
+machine token.</li>
+<li><strong>Process Identifier (2 bytes):</strong> The PID of the
+process generating the ID, ensuring two separate processes on the exact
+same server do not generate duplicate values.</li>
+<li><strong>Incremental Counter (3 bytes):</strong> An atomically
+incrementing local counter initialized to a random value. This counter
+ensures that a single process running on a single machine can generate
+up to 16,777,216 unique IDs within the same second without
+colliding.</li>
+</ol>
+<p>Because each piece of the identifier operates in an independent
+domain, no two nodes or processes can produce the same combination,
+removing the need for inter-node communication.</p>
+<h3 id="pure-entropy-and-uuidv4">Pure Entropy and UUIDv4</h3>
+<p>Another approach used by systems such as CouchDB is the Universally
+Unique Identifier (UUID), specifically version 4. UUIDv4 relies on 122
+bits of cryptographically secure pseudo-random entropy:</p>
+<ul>
+<li><strong>Collision Mathematics:</strong> The total number of possible
+UUIDv4 keys is <span class="math inline">\(2^{122}\)</span>
+(approximately <span class="math inline">\(5.3 \times 10^{36}\)</span>).
+Under the Birthday Paradox, a cluster would have to generate roughly 1
+billion UUIDs per second for 85 years before the probability of a single
+collision reaches 50%.</li>
+<li><strong>Decentralized Operation:</strong> Because the probability of
+collision is mathematically negligible, any client, driver, or storage
+node can independently generate a UUIDv4 without consulting any peer
+node.</li>
+<li><strong>Drawback:</strong> Purely random IDs cause index
+fragmentation in B-tree-based storage engines because keys are not
+generated sequentially, which often degrades write performance over
+time.</li>
+</ul>
+<h3
+id="time-ordered-distributed-ids-snowflake-and-ulid-patterns">Time-Ordered
+Distributed IDs (Snowflake and ULID Patterns)</h3>
+<p>To preserve B-tree write performance and maintain chronological
+sorting while avoiding central bottlenecks, modern systems frequently
+employ variants of Twitter’s Snowflake design or Universally Unique
+Lexicographically Sortable Identifiers (ULIDs):</p>
+<ul>
+<li><strong>Time Component (Millisecond Precision):</strong> Placed at
+the most significant bits of the identifier, ensuring that newly
+generated documents are appended sequentially at the end of storage
+indexes.</li>
+<li><strong>Worker/Node ID:</strong> A pre-assigned or autonomously
+discovered integer identifying the physical or virtual instance. While
+initial node registration may use lightweight registration, runtime ID
+creation requires zero coordination.</li>
+<li><strong>Per-Millisecond Sequence:</strong> An in-memory sequence
+integer that resets every millisecond. If the sequence overflows within
+a single millisecond, the local generation routine pauses until the next
+millisecond tick.</li>
+</ul>
+<h3 id="client-side-vs-server-side-generation">Client-Side vs.
+Server-Side Generation</h3>
+<p>Document stores often push identifier generation directly to the
+client SDK or driver. Because client-side generation rules (such as BSON
+<code>ObjectId</code> implementations in official language drivers)
+incorporate the client machine's identity and process context, documents
+can arrive at the database pre-keyed. This removes ID generation
+overhead from the database engines entirely and allows clients to know a
+document's primary key before executing the network write operation.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/how-distributed-no-sql-stores-generate-unique-i-ds';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

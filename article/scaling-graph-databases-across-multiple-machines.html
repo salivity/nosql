@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scaling Graph Databases Across Multiple Machines - nosql</title>
+    <meta name="description" content="Graph NoSQL platforms achieve horizontal scalability across multiple physical servers by overcoming the inherent challenge of distributed graph traversal. Unlike tabular or document databases that can easily shard independent records, graphs rely on deepl">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/scaling-graph-databases-across-multiple-machines">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Scaling Graph Databases Across Multiple Machines - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/scaling-graph-databases-across-multiple-machines" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Graph NoSQL platforms achieve horizontal scalability across multiple physical servers by overcoming the inherent challenge of distributed graph traversal. Unlike tabular or document databases that can easily shard independent records, graphs rely on deepl" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="scaling-graph-databases-across-multiple-machines">Scaling Graph
+Databases Across Multiple Machines</h1>
+<p>Graph NoSQL platforms achieve horizontal scalability across multiple
+physical servers by overcoming the inherent challenge of distributed
+graph traversal. Unlike tabular or document databases that can easily
+shard independent records, graphs rely on deeply interconnected
+relationships. To scale out, modern distributed graph systems employ
+specialized graph partitioning methods (such as edge-cut and vertex-cut
+algorithms), decoupled compute-and-storage architectures, distributed
+query execution engines, and consensus-driven replication protocols.
+This article explains the core mechanisms graph platforms use to
+distribute nodes and relationships across a cluster while maintaining
+low-latency query performance.</p>
+<h3 id="the-challenge-of-distributed-graph-data">The Challenge of
+Distributed Graph Data</h3>
+<p>Traditional databases scale horizontally by sharding independent rows
+or documents. Graphs, however, consist of vertices (nodes) and edges
+(relationships) that frequently point to one another. Executing a graph
+traversal—such as finding a path between two entities or calculating
+degrees of separation—often requires following pointers continuously. In
+a distributed environment, if an edge points to a vertex residing on a
+different physical server, the engine must make a network hop. Because
+network latency is orders of magnitude slower than in-memory or local
+disk access, minimizing cross-partition hops is the primary design goal
+for distributed graph systems.</p>
+<h3 id="graph-partitioning-strategies">Graph Partitioning
+Strategies</h3>
+<p>To store a graph across several machines, the dataset must be
+partitioned. Graph databases primarily use two mathematical
+approaches:</p>
+<ul>
+<li><strong>Edge-Cut Partitioning:</strong> Vertices are distributed
+across servers, and edges crossing machine boundaries are "cut." While
+this keeps all properties of a given vertex localized to a single
+machine, it can lead to massive network overhead if high-degree vertices
+(nodes with thousands or millions of connections, known as "supernodes")
+are queried frequently.</li>
+<li><strong>Vertex-Cut Partitioning:</strong> Edges are assigned to
+specific machines, and vertices are split across boundaries. A single
+vertex may have a "master" mirror on one machine and "replica" or
+"proxy" mirrors on other machines where its edges reside. This approach
+significantly reduces cross-machine traversals for high-degree nodes by
+localizing edge evaluation to the machines where those edges live.</li>
+</ul>
+<p>Advanced graph engines often use streaming or heuristic-based graph
+partitioning algorithms (such as METIS or Fennel) during data ingestion
+to continuously balance the storage load while minimizing cut edges.</p>
+<h3 id="distributed-traversal-and-compute">Distributed Traversal and
+Compute</h3>
+<p>Once the graph is partitioned, query execution must coordinate across
+the physical cluster. Systems generally adopt one of two computational
+models:</p>
+<ul>
+<li><strong>Scatter-Gather / Bulk Synchronous Parallel (BSP):</strong>
+Popularized by Google’s Pregel framework, this model treats computation
+as a series of supersteps. Vertices compute locally using their incoming
+messages, mutate state, and send messages along outgoing edges to
+neighbor vertices on other machines. The system synchronizes globally
+between steps, making it ideal for analytical workloads like PageRank or
+community detection.</li>
+<li><strong>Distributed Index-Free Adjacency:</strong> For real-time
+OLTP queries, the engine uses distributed query planning. A coordinator
+node receives the query, decomposes it into sub-traversals, routes those
+requests to the machines holding the relevant partitions, and aggregates
+intermediate results asynchronously.</li>
+</ul>
+<h3 id="compute-and-storage-decoupling">Compute and Storage
+Decoupling</h3>
+<p>Many modern graph databases scale compute independently from storage
+to simplify horizontal elasticity. In this architecture:</p>
+<ol type="1">
+<li><strong>Storage Layer:</strong> Distributed NoSQL wide-column stores
+(e.g., Apache Cassandra, HBase) or cloud-native key-value stores manage
+the persistence, replication, and physical sharding of adjacency
+lists.</li>
+<li><strong>Compute Layer:</strong> Stateless graph processing nodes
+maintain an in-memory graph view, execute traversal logic, and fetch
+graph structures from the storage tier as needed.</li>
+</ol>
+<p>Decoupling allows teams to add compute nodes during peak query loads
+without redistributing the underlying graph partitions.</p>
+<h3 id="caching-and-replication">Caching and Replication</h3>
+<p>To mitigate network penalties, distributed graph engines heavily
+leverage vertex caching. Frequently accessed vertices and their
+immediate neighborhoods are cached in the memory of multiple compute
+nodes.</p>
+<p>Data consistency and fault tolerance across partitions are managed
+through consensus protocols like Raft or Paxos. Mutations to vertices
+and edges are committed across a quorum of replica partitions, ensuring
+high availability even if a physical node within the cluster fails.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/scaling-graph-databases-across-multiple-machines';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

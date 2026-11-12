@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Schema Evolution in Wide-Column NoSQL Databases - nosql</title>
+    <meta name="description" content="Wide-column NoSQL databases manage schema evolution across millions of historical partition rows without downtime or expensive table locks by decoupling the logical schema from the underlying physical storage engine. Rather than rewriting historical data">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/schema-evolution-in-wide-column-no-sql-databases">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Schema Evolution in Wide-Column NoSQL Databases - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/schema-evolution-in-wide-column-no-sql-databases" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Wide-column NoSQL databases manage schema evolution across millions of historical partition rows without downtime or expensive table locks by decoupling the logical schema from the underlying physical storage engine. Rather than rewriting historical data" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="schema-evolution-in-wide-column-nosql-databases">Schema
+Evolution in Wide-Column NoSQL Databases</h1>
+<p>Wide-column NoSQL databases manage schema evolution across millions
+of historical partition rows without downtime or expensive table locks
+by decoupling the logical schema from the underlying physical storage
+engine. Rather than rewriting historical data when schema definitions
+change, engines like Apache Cassandra, ScyllaDB, and Apache HBase treat
+mutations as metadata-only operations, relying on sparse storage,
+read-time schema reconciliation, and background compaction to handle
+missing, added, or deprecated columns gracefully.</p>
+<h3 id="physical-storage-and-the-sparse-column-model">Physical Storage
+and the Sparse Column Model</h3>
+<p>To understand schema evolution at scale, one must look at how
+wide-column databases write to disk. These systems typically use
+Log-Structured Merge-trees (LSM-trees) and write immutable files, such
+as SSTables or HFiles.</p>
+<p>Data is stored as a multi-dimensional sorted map. Within each
+partition, columns are stored as discrete key-value cells consisting of
+a column name, a timestamp, a value, and optional metadata (like
+tombstones or expiration markers). Because storage is sparse, null
+values consume zero bytes on disk. A row does not require a fixed-width
+binary layout, which means historical partitions do not need to
+physically contain every column defined in the logical table schema.</p>
+<h3 id="adding-new-columns-metadata-only-operations">Adding New Columns:
+Metadata-Only Operations</h3>
+<p>When executing an operation such as
+<code>ALTER TABLE ADD column_name data_type</code>, the database does
+not backfill millions of existing partitions with null values.</p>
+<ol type="1">
+<li><strong>Catalog Mutation:</strong> The query coordinator updates the
+system schema keyspace/catalog across the cluster using a consensus
+protocol (e.g., Paxos in Cassandra or Raft in modern distributed
+systems).</li>
+<li><strong>Zero Disk I/O:</strong> No historical SSTables are touched,
+locked, or modified.</li>
+<li><strong>Lazy Evaluation:</strong> As applications read historical
+partitions, the read coordinator fetches the existing cells from disk,
+compares them against the latest schema definition, and dynamically
+evaluates the absent column as <code>null</code> (or a configured
+default) in the query result.</li>
+</ol>
+<h3 id="dropping-and-renaming-columns">Dropping and Renaming
+Columns</h3>
+<p>Removing or renaming schema elements follows a similar metadata-first
+pattern to avoid processing historical partitions synchronously:</p>
+<ul>
+<li><strong>Dropping Columns:</strong> Dropping a column immediately
+removes it from the table’s active schema definition. Subsequent read
+operations filter out the dropped column, even if historical SSTables
+still hold physical cells for it. The historical data remains on disk as
+dead data until routine background compaction merges SSTables, at which
+point the engine discards the unreferenced cells to reclaim disk
+space.</li>
+<li><strong>Renaming Columns:</strong> Because historical cells are
+often identified internally by their column name or a compact internal
+field ID, renaming is typically restricted to clustering keys or
+requires adding a new column, dual-writing from the application layer,
+and deprecating the old column name.</li>
+</ul>
+<h3 id="read-time-schema-reconciliation">Read-Time Schema
+Reconciliation</h3>
+<p>When an application queries a historical partition, the wide-column
+engine performs read-time schema reconciliation:</p>
+<ol type="1">
+<li><strong>SSTable Scan:</strong> The storage engine reads the
+immutable data blocks for the requested partition key across multiple
+SSTables and the in-memory Memtable.</li>
+<li><strong>Timestamp Resolution:</strong> Cells with the highest
+timestamp for each column name win, and any cells shadowed by cell-level
+or partition-level tombstones are filtered out.</li>
+<li><strong>Schema Mapping:</strong> The reconstructed cell set is
+projected against the current schema definition. Any fields present in
+the schema but missing in the retrieved historical cells are populated
+with <code>null</code>. Conversely, any physical cells matching dropped
+columns are ignored and omitted from the client response.</li>
+</ol>
+<h3 id="type-alterations-and-application-level-migrations">Type
+Alterations and Application-Level Migrations</h3>
+<p>Because the database relies on binary serialization formats on disk,
+modifying an existing column's data type is heavily restricted. In most
+wide-column engines, type changes are only allowed if the new type is
+binary-compatible (such as changing an <code>int</code> to a
+<code>varint</code>).</p>
+<p>When an incompatible type change or complex structural evolution is
+required across millions of historical partitions, teams use
+zero-downtime migration patterns instead of in-place database
+alters:</p>
+<ol type="1">
+<li><strong>Schema Expansion:</strong> Add a new column with the target
+data type alongside the legacy column.</li>
+<li><strong>Dual-Writing:</strong> Update the application to write
+modern payloads to both the legacy and new columns.</li>
+<li><strong>Backfilling:</strong> Run an asynchronous background batch
+job (such as an Apache Spark or custom worker process) that reads
+historical partitions, converts the legacy data to the new format, and
+writes to the new column.</li>
+<li><strong>Read Switching and Cleanup:</strong> Update the application
+to read from the new column, cease writes to the legacy column, and drop
+the legacy column from the schema.</li>
+</ol></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/schema-evolution-in-wide-column-no-sql-databases';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

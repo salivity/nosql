@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Louvain Modularity in Graph NoSQL Databases - nosql</title>
+    <meta name="description" content="Graph NoSQL systems calculate community detection through algorithms like Louvain modularity by analyzing network topology to uncover natural groupings of densely connected nodes. Louvain modularity achieves this via an iterative, two-phase process that m">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/louvain-modularity-in-graph-no-sql-databases">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Louvain Modularity in Graph NoSQL Databases - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/louvain-modularity-in-graph-no-sql-databases" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Graph NoSQL systems calculate community detection through algorithms like Louvain modularity by analyzing network topology to uncover natural groupings of densely connected nodes. Louvain modularity achieves this via an iterative, two-phase process that m" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="louvain-modularity-in-graph-nosql-databases">Louvain Modularity
+in Graph NoSQL Databases</h1>
+<p>Graph NoSQL systems calculate community detection through algorithms
+like Louvain modularity by analyzing network topology to uncover natural
+groupings of densely connected nodes. Louvain modularity achieves this
+via an iterative, two-phase process that maximizes a global quality
+metric called modularity (<span class="math inline">\(Q\)</span>).
+Native graph databases accelerate this computationally heavy process by
+pairing in-memory graph projections and index-free adjacency with
+parallel computing frameworks, allowing them to evaluate community
+assignments across millions of relationships without the performance
+penalties of relational joins.</p>
+<h3 id="understanding-modularity">Understanding Modularity</h3>
+<p>Modularity is a scalar value between -1 and 1 that measures the
+density of edges inside communities compared to a randomized null model.
+A high modularity score indicates that nodes within a community have
+significantly more connections among themselves than would be expected
+by random chance.</p>
+<p>The algorithm mathematically evaluates modularity changes (<span
+class="math inline">\(\Delta Q\)</span>) whenever a node considers
+migrating into an adjacent community:</p>
+<p><span class="math display">\[\Delta Q = \left[ \frac{\Sigma_{in} +
+2k_{i,in}}{2m} - \left( \frac{\Sigma_{tot} + k_i}{2m} \right)^2 \right]
+- \left[ \frac{\Sigma_{in}}{2m} - \left( \frac{\Sigma_{tot}}{2m}
+\right)^2 - \left( \frac{k_i}{2m} \right)^2 \right]\]</span></p>
+<p>Where:</p>
+<ul>
+<li><span class="math inline">\(m\)</span> is the total weight of all
+edges in the graph.</li>
+<li><span class="math inline">\(\Sigma_{in}\)</span> is the sum of the
+weights of the links inside the target community.</li>
+<li><span class="math inline">\(\Sigma_{tot}\)</span> is the sum of the
+weights of the links incident to nodes in the target community.</li>
+<li><span class="math inline">\(k_i\)</span> is the sum of the weights
+of the links incident to node <span
+class="math inline">\(i\)</span>.</li>
+<li><span class="math inline">\(k_{i,in}\)</span> is the sum of the
+weights of the links from node <span class="math inline">\(i\)</span> to
+nodes in the target community.</li>
+</ul>
+<h3 id="the-two-phase-iterative-cycle">The Two-Phase Iterative
+Cycle</h3>
+<p>Graph systems execute the Louvain method through a hierarchical,
+repeated cycle consisting of two main phases:</p>
+<h4 id="phase-1-local-modularity-optimization">Phase 1: Local Modularity
+Optimization</h4>
+<ol type="1">
+<li><strong>Initialization:</strong> The engine assigns every node in
+the graph to its own unique community.</li>
+<li><strong>Neighbor Evaluation:</strong> For each node <span
+class="math inline">\(i\)</span>, the engine traverses its immediate
+edges to identify all adjacent communities.</li>
+<li><strong>Gain Calculation:</strong> The system calculates the
+modularity delta (<span class="math inline">\(\Delta Q\)</span>) for
+moving node <span class="math inline">\(i\)</span> out of its current
+community and into each neighbor's community.</li>
+<li><strong>Relocation:</strong> Node <span
+class="math inline">\(i\)</span> moves to the community that produces
+the highest positive modularity gain. If no move produces a positive
+gain, the node stays in its current community.</li>
+<li><strong>Convergence:</strong> The algorithm loops through all nodes
+repeatedly until no individual node relocation improves the global
+modularity score.</li>
+</ol>
+<h4 id="phase-2-community-aggregation-coarsening">Phase 2: Community
+Aggregation (Coarsening)</h4>
+<p>Once Phase 1 stabilizes, the database compresses the graph into a
+higher-level network:</p>
+<ol type="1">
+<li>Every discovered community is collapsed into a single
+"super-node."</li>
+<li>Edges connecting nodes inside the same community are converted into
+a weighted self-loop on that community's super-node.</li>
+<li>Edges connecting nodes across different communities are summed
+together into single, weighted edges between the respective
+super-nodes.</li>
+</ol>
+<p>After aggregation, the database runs Phase 1 again on this newly
+formed meta-graph. The cycle repeats until the graph cannot be coarsened
+further and modularity reaches a plateau, resulting in a hierarchical
+tree (dendrogram) of communities.</p>
+<h3 id="architectural-execution-in-graph-nosql-systems">Architectural
+Execution in Graph NoSQL Systems</h3>
+<p>Graph databases employ distinct architectural techniques to run
+Louvain modularity at scale:</p>
+<ul>
+<li><strong>Index-Free Adjacency:</strong> Because native graph
+databases store connections as direct pointers to neighboring nodes,
+looking up adjacent communities in Phase 1 avoids index lookups. The
+engine traverses an edge in <span class="math inline">\(O(1)\)</span>
+constant time.</li>
+<li><strong>In-Memory Projections:</strong> Transactional engines (OLTP)
+are not optimized for heavy topological analytics. Systems project graph
+subgraphs into temporary, compressed in-memory structures—such as
+Compressed Sparse Row (CSR) formats. This eliminates transaction locking
+and disk I/O during thousands of modularity checks.</li>
+<li><strong>Parallelization and Synchronization:</strong> Databases
+parallelize Phase 1 calculations across multiple CPU cores. Because
+updating community IDs simultaneously can create race conditions (e.g.,
+node <span class="math inline">\(A\)</span> and node <span
+class="math inline">\(B\)</span> moving based on stale states), engines
+either use graph coloring techniques to evaluate independent sets
+concurrently or adopt asynchronous actor models with randomized node
+traversal order.</li>
+<li><strong>Distributed Partitioning:</strong> In distributed NoSQL
+graph platforms, the graph is sharded across a cluster using vertex-cut
+or edge-cut partitioning. The Louvain algorithm runs via Bulk
+Synchronous Parallel (BSP) message-passing paradigms, where boundary
+nodes exchange modularity information with neighboring partitions before
+synchronizing state across nodes.</li>
+</ul></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/louvain-modularity-in-graph-no-sql-databases';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

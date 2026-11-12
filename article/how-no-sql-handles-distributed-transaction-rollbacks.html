@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How NoSQL Handles Distributed Transaction Rollbacks - nosql</title>
+    <meta name="description" content="Distributed document NoSQL platforms handle transaction rollback during failed commits through coordinated protocols like Two-Phase Commit (2PC) paired with distributed consensus mechanisms like Raft or Paxos. When a distributed commit encounters errors—s">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/how-no-sql-handles-distributed-transaction-rollbacks">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How NoSQL Handles Distributed Transaction Rollbacks - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/how-no-sql-handles-distributed-transaction-rollbacks" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Distributed document NoSQL platforms handle transaction rollback during failed commits through coordinated protocols like Two-Phase Commit (2PC) paired with distributed consensus mechanisms like Raft or Paxos. When a distributed commit encounters errors—s" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-nosql-handles-distributed-transaction-rollbacks">How NoSQL
+Handles Distributed Transaction Rollbacks</h1>
+<p>Distributed document NoSQL platforms handle transaction rollback
+during failed commits through coordinated protocols like Two-Phase
+Commit (2PC) paired with distributed consensus mechanisms like Raft or
+Paxos. When a distributed commit encounters errors—such as network
+partitions, node crashes, write conflicts, or timeouts—the platform
+initiates a rollback process that aborts the transaction across all
+participating shards, releases transactional locks, unrolls staged
+modifications via Multi-Version Concurrency Control (MVCC) or
+write-intent records, and restores the database to its pre-transaction
+consistent state.</p>
+<h3 id="the-mechanism-of-distributed-commits">The Mechanism of
+Distributed Commits</h3>
+<p>In modern document NoSQL databases (such as MongoDB, Couchbase, or
+Amazon DocumentDB), multi-document and multi-shard transactions rely on
+a transaction coordinator. The coordinator orchestrates the commit
+across multiple participant nodes hosting the targeted documents using a
+variant of the Two-Phase Commit (2PC) protocol:</p>
+<ol type="1">
+<li><strong>Prepare Phase:</strong> The coordinator sends a
+<code>prepare</code> request to all participant nodes. Participants
+validate constraints, ensure conflict-free locks, persist the prepared
+operations to their local Write-Ahead Logs (WAL) or replication logs
+(e.g., MongoDB's oplog), and return a <code>prepared</code>
+acknowledgment.</li>
+<li><strong>Commit Phase:</strong> Once all participants successfully
+acknowledge the prepare phase, the coordinator writes a
+<code>commit</code> decision to its local log and instructs all
+participants to apply the changes permanently.</li>
+</ol>
+<h3 id="how-rollback-triggers-on-failure">How Rollback Triggers on
+Failure</h3>
+<p>A transaction rollback is triggered whenever the commit workflow
+cannot be safely completed. Common failure scenarios include:</p>
+<ul>
+<li><strong>Prepare Phase Rejection:</strong> If any participant fails
+to acquire write locks, encounters a document version conflict, or
+suffers a local storage failure, it sends an <code>abort</code> message
+back to the coordinator.</li>
+<li><strong>Network Timeouts:</strong> If the coordinator does not
+receive acknowledgments from every participant within a configured
+timeout window, it treats the transaction as failed.</li>
+<li><strong>Node Crashes:</strong> If a participant node crashes before
+preparing, or if the coordinator crashes before persisting a
+<code>commit</code> decision, the transaction must be rolled back.</li>
+</ul>
+<h3 id="the-rollback-execution-process">The Rollback Execution
+Process</h3>
+<p>When a failure occurs, the platform guarantees atomicity through the
+following rollback mechanisms:</p>
+<h4 id="1-abort-decision-propagation">1. Abort Decision Propagation</h4>
+<p>If the coordinator decides to abort (or fails to reach consensus
+during the prepare phase), it writes an <code>abort</code> record to its
+transaction log and broadcasts an <code>abortTransaction</code> command
+to all participating shards.</p>
+<h4 id="2-discarding-staged-changes-mvcc-and-write-intents">2.
+Discarding Staged Changes (MVCC and Write Intents)</h4>
+<p>Document databases generally avoid modifying active document states
+directly during a transaction. Instead, they use Multi-Version
+Concurrency Control (MVCC) or write intents:</p>
+<ul>
+<li><strong>Write Intents / Shadows:</strong> Changes are staged in an
+isolated transaction buffer or written as uncommitted "intent" records
+marked with the unique transaction ID.</li>
+<li><strong>MVCC Discard:</strong> When an abort command arrives,
+participants discard the staged in-memory buffers or mark the
+uncommitted version deltas as invalid. Because existing reads were
+directed to older, committed document snapshots, active readers never
+observe the uncommitted data.</li>
+</ul>
+<h4 id="3-lock-release-and-resource-cleanup">3. Lock Release and
+Resource Cleanup</h4>
+<p>During the active transaction, participant nodes hold write locks or
+intent-exclusive locks on modified documents to prevent concurrent
+updates. Upon receiving the abort instruction, each participant
+immediately releases these locks and frees allocated memory buffers,
+allowing concurrent transactions that were blocked on those documents to
+proceed.</p>
+<h4 id="4-handling-coordinator-crashes-recovery-processing">4. Handling
+Coordinator Crashes (Recovery Processing)</h4>
+<p>If the coordinator crashes midway through the distributed commit:</p>
+<ul>
+<li><strong>Before the Commit Decision is Logged:</strong> When a new
+coordinator takes over or the existing one restarts, it inspects its
+log. Seeing no finalized <code>commit</code> entry, it defaults to
+safety by writing an <code>abort</code> entry and instructing all
+participants to roll back.</li>
+<li><strong>After the Commit Decision is Logged:</strong> If the
+coordinator persisted the <code>commit</code> decision before crashing,
+the recovery process reads the log and re-sends the <code>commit</code>
+command to any lagging participants, driving the transaction forward to
+completion rather than rolling back.</li>
+</ul>
+<h4 id="5-consensus-log-truncation">5. Consensus Log Truncation</h4>
+<p>If a participant node prepared a transaction locally by writing to
+its consensus engine (like Raft), but the overarching transaction is
+aborted, the participant does not remove historical log entries
+destructively. Instead, it records a compensating <code>abort</code>
+entry in its distributed log. This advances the consensus state machine,
+ensuring all replicas on that shard agree that the local transaction
+must be dropped.</p></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/how-no-sql-handles-distributed-transaction-rollbacks';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

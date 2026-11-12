@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How to Prevent Dirty Reads in Eventual Consistency NoSQL - nosql</title>
+    <meta name="description" content="In distributed NoSQL architectures operating under eventual consistency, dirty reads—defined as accessing uncommitted, partially applied, or concurrently mutated data—pose a significant data integrity challenge. While eventual consistency prioritizes high">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/how-to-prevent-dirty-reads-in-eventual-consistency-no-sql">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="How to Prevent Dirty Reads in Eventual Consistency NoSQL - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/how-to-prevent-dirty-reads-in-eventual-consistency-no-sql" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="In distributed NoSQL architectures operating under eventual consistency, dirty reads—defined as accessing uncommitted, partially applied, or concurrently mutated data—pose a significant data integrity challenge. While eventual consistency prioritizes high" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="how-to-prevent-dirty-reads-in-eventual-consistency-nosql">How to
+Prevent Dirty Reads in Eventual Consistency NoSQL</h1>
+<p>In distributed NoSQL architectures operating under eventual
+consistency, dirty reads—defined as accessing uncommitted, partially
+applied, or concurrently mutated data—pose a significant data integrity
+challenge. While eventual consistency prioritizes high availability and
+partition tolerance, applications frequently require mechanisms to
+guarantee read accuracy. This article details the primary techniques
+used to eliminate dirty reads across distributed nodes, including
+tunable quorum consistency, session-level guarantees, Multi-Version
+Concurrency Control (MVCC), and distributed transaction consensus
+protocols.</p>
+<h3 id="1-tunable-quorum-consistency-strong-readwrite-quorums">1.
+Tunable Quorum Consistency (Strong Read/Write Quorums)</h3>
+<p>Most distributed NoSQL systems (such as Apache Cassandra, Amazon
+DynamoDB, and ScyllaDB) permit users to configure replication
+consistency levels per operation. Dirty and stale reads are prevented by
+enforcing the quorum condition:</p>
+<p><strong>R + W &gt; N</strong></p>
+<ul>
+<li><strong>N</strong>: The replication factor (total number of nodes
+storing the data).</li>
+<li><strong>W</strong>: The write quorum (number of nodes that must
+acknowledge a write before it is considered committed).</li>
+<li><strong>R</strong>: The read quorum (number of nodes that must
+respond to a read request).</li>
+</ul>
+<p>When the sum of the read nodes and write nodes exceeds the total
+replica count, the read set and write set are guaranteed to overlap on
+at least one node. The node with the latest timestamp or version vector
+determines the true state, preventing the client from reading an
+uncommitted or partially propagated write.</p>
+<h3 id="2-read-your-writes-monotonic-consistency">2. Read-Your-Writes
+(Monotonic) Consistency</h3>
+<p>In user-facing applications, dirty reads often manifest as an update
+vanishing immediately after submission. Session consistency or
+"read-your-writes" consistency ensures that a single client never reads
+data older than its most recent acknowledged write.</p>
+<ul>
+<li><strong>Session Tokens:</strong> The database or application
+middleware attaches a monotonic sequence number or vector clock token to
+write acknowledgments. Subsequent read requests pass this token to the
+cluster.</li>
+<li><strong>Replica Wait State:</strong> The serving replica inspects
+the token. If the node has not yet replicated up to that sequence
+number, it either waits to fulfill the read or redirects the query to an
+up-to-date node.</li>
+</ul>
+<h3 id="3-primary-node-read-routing">3. Primary-Node Read Routing</h3>
+<p>In systems utilizing a single-leader or primary-replica architecture
+(such as MongoDB with replica sets or Redis in clustered mode), the
+leader node handles all authoritative writes.</p>
+<ul>
+<li>To avoid dirty reads caused by asynchronous replication lag to
+secondary nodes, the read preference can be configured strictly to route
+queries to the primary replica.</li>
+<li>By bypassing eventual consistency nodes entirely for sensitive
+queries, reads are serialized against the exact state of active writes,
+preventing uncommitted or outdated reads.</li>
+</ul>
+<h3
+id="4-multi-version-concurrency-control-mvcc-and-snapshot-isolation">4.
+Multi-Version Concurrency Control (MVCC) and Snapshot Isolation</h3>
+<p>MVCC avoids locking mechanisms by maintaining multiple immutable
+versions of a record alongside transactional timestamps.</p>
+<ul>
+<li><strong>Snapshot Reads:</strong> When a read operation starts, it is
+assigned a logical timestamp. The database filters out any records or
+mutations with commit timestamps greater than the read timestamp, as
+well as any records associated with in-flight transactions.</li>
+<li><strong>Read-Committed Filters:</strong> A read operation verifies
+the commit flag of an update. If a write is still propagating or
+uncommitted across a partition, the node continues to serve the prior
+committed snapshot version, completely isolating readers from dirty
+states.</li>
+</ul>
+<h3
+id="5-distributed-transaction-protocols-two-phase-commit-and-consensus-groups">5.
+Distributed Transaction Protocols (Two-Phase Commit and Consensus
+Groups)</h3>
+<p>When operations span multiple documents, partitions, or shards,
+relying solely on node-level replication is insufficient. Modern NoSQL
+platforms incorporate distributed consensus protocols to provide ACID
+transaction guarantees.</p>
+<ul>
+<li><strong>Consensus-Backed Writes (Raft/Paxos):</strong> Systems like
+Google Cloud Spanner, CockroachDB, and modern MongoDB clusters use
+consensus groups. A write is not visible to readers until the consensus
+state machine accepts and commits the transaction across a
+majority.</li>
+<li><strong>Two-Phase Locking (2PL) with Two-Phase Commit
+(2PC):</strong> Modifying transactions acquire exclusive write locks
+across target nodes. Nodes serving reads will block or read the last
+stable checkpoint until the prepare and commit phases successfully
+conclude, guaranteeing dirty intermediate writes are never exposed.</li>
+</ul></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/how-to-prevent-dirty-reads-in-eventual-consistency-no-sql';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>

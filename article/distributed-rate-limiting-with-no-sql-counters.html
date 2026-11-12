@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Distributed Rate Limiting with NoSQL Counters - nosql</title>
+    <meta name="description" content="Distributed rate limiting controls the rate of incoming traffic across multiple distributed nodes to protect APIs and backend services from resource exhaustion, brute-force attacks, and denial of service. NoSQL databases handle these counters efficiently">
+    <link rel="canonical" href="https://salivity.github.io/nosql/article/distributed-rate-limiting-with-no-sql-counters">
+    <link rel="search" type="application/opensearchdescription+xml" title="nosql" href="/nosql/opensearch.xml">
+    <link rel="icon" href="/nosql/favicon.ico">
+    <link rel="stylesheet" href="/nosql/css/style.css">
+    <link media="print" rel="stylesheet" href="/nosql/css/print.css">
+    <script src="/nosql/js/fuse.min.js"></script>
+    <script src="/nosql/js/script.js"></script>
+    <script id="MathJax-script" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/4.1.3/tex-chtml.min.js" defer></script>
+    <script src="/monetize/monetize.js"></script>
+    <script src="/social/social.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Distributed Rate Limiting with NoSQL Counters - nosql" />
+    <meta property="og:url" content="https://salivity.github.io/nosql/article/distributed-rate-limiting-with-no-sql-counters" />
+    <meta property="og:image" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:secure_url" content="https://salivity.github.io/nosql/images/open-graph/default.webp" />
+    <meta property="og:image:width" content="1120" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:description" content="Distributed rate limiting controls the rate of incoming traffic across multiple distributed nodes to protect APIs and backend services from resource exhaustion, brute-force attacks, and denial of service. NoSQL databases handle these counters efficiently" />
+    <link rel="manifest" href="/nosql/pwa/manifest.json" />
+</head>
+<body>
+    <header>
+        <a href="/nosql/" aria-label="Go To Home Page" title="Go To Home Page" id="logo">
+            <span>salivity.github.io/</span><span>nosql</span>
+        </a>
+        <nav>
+            <ul class="header-links">
+                <li><a href="/nosql/search" title="Search" aria-label="Go To Search Page"><svg class="svg-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14"></path></svg></a></li>
+                <li><a id="theme-toggle" title="Theme" href="javascript:void(0);" aria-label="Toggle Website Theme"></a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        
+    <div class="article-layout">
+        <aside id="profile-sidebar" class="profile-column" aria-label="Author Profile"></aside>
+        <div class="article-main-column">
+            <article><h1 id="distributed-rate-limiting-with-nosql-counters">Distributed Rate
+Limiting with NoSQL Counters</h1>
+<p>Distributed rate limiting controls the rate of incoming traffic
+across multiple distributed nodes to protect APIs and backend services
+from resource exhaustion, brute-force attacks, and denial of service.
+NoSQL databases handle these counters efficiently by utilizing
+high-throughput in-memory data structures, server-side atomic
+operations, and automatic key expiration. This article explores the
+primary techniques NoSQL engines use to maintain accurate counters
+across distributed networks without introducing performance bottlenecks
+or concurrency conflicts.</p>
+<h3 id="atomic-increment-operations">Atomic Increment Operations</h3>
+<p>Standard read-modify-write cycles create severe race conditions in
+high-concurrency systems unless locked, which introduces latency. NoSQL
+databases bypass this limitation through native atomic increments:</p>
+<ul>
+<li><strong>Single-Threaded Execution:</strong> In-memory stores like
+Redis process commands sequentially on a single thread per shard,
+ensuring commands like <code>INCR</code> or <code>HINCRBY</code> execute
+without locks or race conditions.</li>
+<li><strong>Conditional and Atomic Updates:</strong> Multi-master
+systems like Amazon DynamoDB and Apache Cassandra use atomic update
+expressions (e.g., DynamoDB's <code>ADD</code> action or conditional
+writes) and distributed counter data types to update values on the
+storage node directly.</li>
+</ul>
+<p>By executing the mathematical increment directly in the database
+engine, network round-trips are reduced to a single operation.</p>
+<h3 id="ttl-driven-state-eviction">TTL-Driven State Eviction</h3>
+<p>Rate limiting requires boundaries based on time, such as requests per
+second or per minute. Storing historical count data indefinitely creates
+memory bloat and requires manual garbage collection.</p>
+<p>NoSQL databases solve this using native Time-To-Live (TTL)
+mechanisms. When a counter key is created for a given time slice (e.g.,
+<code>user_123:2023-10-27T10:00</code>), the application sets an
+expiration time matching the rate-limit window. The database
+automatically evicts the expired keys from memory asynchronously,
+removing the need for scheduled deletion queries or table
+maintenance.</p>
+<h3 id="common-implementation-patterns">Common Implementation
+Patterns</h3>
+<h4 id="1-fixed-window-counters">1. Fixed Window Counters</h4>
+<p>This approach assigns a single counter key per client and time frame
+(e.g., a specific minute). Every request invokes an atomic increment and
+sets a TTL if the key is new. If the returned counter exceeds the
+threshold, the request is rejected. While computationally light, this
+pattern can allow up to twice the rate limit at window boundary
+edges.</p>
+<h4 id="2-sliding-window-logs-via-sorted-sets">2. Sliding Window Logs
+via Sorted Sets</h4>
+<p>To prevent boundary bursts, systems use sorted sets (such as Redis
+<code>ZSET</code>). The request timestamp serves as both the score and
+the member. The flow executes atomically:</p>
+<ol type="1">
+<li>Remove all elements with timestamps older than the current window
+using range deletion (<code>ZREMRANGEBYSCORE</code>).</li>
+<li>Add the current timestamp (<code>ZADD</code>).</li>
+<li>Count the remaining elements (<code>ZCARD</code>).</li>
+<li>Set an expiration to clean up idle users.</li>
+</ol>
+<p>This offers high precision, though memory usage scales with the
+number of requests rather than the number of unique clients.</p>
+<h4 id="3-token-bucket-via-server-side-scripting">3. Token Bucket via
+Server-Side Scripting</h4>
+<p>To implement continuous, adaptive algorithms like the Token Bucket or
+Leaky Bucket, NoSQL systems use embedded server-side scripting (such as
+Redis Lua scripts or Aerospike UDFs). Instead of making multiple
+client-database round trips to fetch timestamps, calculate token
+regeneration, and update balances, the logic executes as a single,
+isolated transaction directly on the database node.</p>
+<h3 id="partitioning-and-scalability-considerations">Partitioning and
+Scalability Considerations</h3>
+<p>To scale distributed counters across a cluster, NoSQL databases
+partition data using consistent hashing.</p>
+<ul>
+<li><strong>Hash Keys:</strong> The rate-limiting key is typically
+constructed from a unique identifier (such as an API token, user ID, or
+IP address). This guarantees that all requests for a specific client
+route to the same partition or node, preserving atomic consistency
+without cross-node locking.</li>
+<li><strong>Consistency vs. Performance:</strong> In strictly consistent
+systems, counters guarantee zero tolerance for limit breaches. In
+eventually consistent databases (like Cassandra), counter increments
+might experience replication delay, occasionally allowing a small margin
+of excess requests in exchange for zero downtime and ultra-low
+read/write latency.</li>
+</ul></article>
+        <div id='disqus_thread'></div>
+        <script>
+
+            var disqus_config = function () {
+                this.page.url =         'https://salivity.github.io/nosql/article/distributed-rate-limiting-with-no-sql-counters';  
+                //this.page.identifier =  PAGE_IDENTIFIER; 
+            };
+            
+            (function() {
+                var d = document, s = d.createElement('script');
+                s.src = 'https://salivity-github-io.disqus.com/embed.js';
+                s.setAttribute('data-timestamp', +new Date());
+                (d.head || d.body).appendChild(s);
+            })();
+        </script>
+    
+        </div>
+    </div>
+    
+    </main>
+    <footer>
+        <nav>
+            <ul class="social-links">
+            </ul>
+        </nav>
+        <nav>
+            <ul class="footer-links">
+                <li><a href="https://smvc.dev/contact">Contact</a></li>
+                <li><a href="/nosql/privacy-policy">Privacy Policy</a></li>
+                <li><a href="/nosql/terms-and-conditions">Terms and Conditions</a></li>
+            </ul>
+        </nav>
+        <div class="copyright">
+            Copyright &copy; <span id="current-year"></span>
+        </div>
+    </footer>
+</body>
+</html>
